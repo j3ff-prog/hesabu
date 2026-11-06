@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { db, updateUser, type User } from './db'
 import { useAuth } from './Auth'
 import { ROLE_LABEL } from './rights'
-import { checkRecovery, hashPin, lockedFor, newSalt, triesLeft, validPin, clearFail } from './auth'
+import { checkRecovery, hashPin, lockedFor, newSalt, triesLeft, validPin, clearFail } from './pin'
 import { Sheet } from './Sheet'
 import { useShop } from './shop'
 

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, setActor, type Role, type User } from './db'
-import { clearFail, getSession, hashPin, lockedFor, noteFail, setSession } from './auth'
+import { clearFail, getSession, hashPin, lockedFor, noteFail, setSession } from './pin'
 import { roleCan, WRITES, type Perm } from './rights'
 import { useAccount } from './cloud'
 
