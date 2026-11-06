@@ -1,5 +1,6 @@
 import { STOCK_CATEGORY, type Expense, type Payment, type Product, type Sale } from './db'
 import { addDays, startOfDay } from './format'
+import { isCost, lineProfit } from './profit'
 import type { Debtor } from './creditLogic'
 
 export interface DayBar {
@@ -18,11 +19,10 @@ export interface Dashboard {
   sales: number
   salesPrev: number
   count: number
-  profit: number // margin on items that have a buying price
-  costedShare: number // 0..1 of sales value that has a buying price
-  spent: number // running costs, not counting new-stock purchases
+  profit: number // goods margin + food/service income - costs (see profit.ts)
+  countedShare: number // 0..1 of sales value that profit is based on
+  spent: number // costs, not counting new-stock purchases
   stockBought: number
-  net: number // profit - spent
   collected: number
   creditGiven: number
   split: { cash: number; mpesa: number; credit: number }
@@ -31,7 +31,7 @@ export interface Dashboard {
   hours: { hour: number; count: number; total: number }[]
   ageing: { label: string; amount: number; people: number }[]
   owed: number
-  stock: { out: number; low: number; ok: number; atCost: number; atPrice: number; total: number }
+  stock: { out: number; low: number; ok: number; atCost: number; atPrice: number; total: number; services: number }
   spending: { category: string; amount: number }[]
 }
 
@@ -60,8 +60,8 @@ export function buildDashboard(
   const split = { cash: 0, mpesa: 0, credit: 0 }
   const bestMap = new Map<string, { name: string; qty: number; revenue: number }>()
   const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0, total: 0 }))
-  let profit = 0
-  let costed = 0
+  let earned = 0
+  let unknown = 0
 
   for (const s of inRange) {
     const d = daily[idx(s.createdAt)]
@@ -72,12 +72,10 @@ export function buildDashboard(
     h.count++
     h.total += s.total
     for (const l of s.lines) {
-      if (l.cost > 0) {
-        const m = (l.price - l.cost) * l.qty
-        profit += m
-        d.profit += m
-        costed += l.price * l.qty
-      }
+      const lp = lineProfit(l)
+      earned += lp.margin + lp.income
+      d.profit += lp.margin + lp.income
+      unknown += lp.unknown
       const b = bestMap.get(l.name) ?? { name: l.name, qty: 0, revenue: 0 }
       b.qty += l.qty
       b.revenue += l.price * l.qty
@@ -87,7 +85,8 @@ export function buildDashboard(
   const sales_ = inRange.reduce((t, s) => t + s.total, 0)
 
   const exp = expenses.filter((e) => e.createdAt >= from && e.createdAt < to)
-  const spent = exp.filter((e) => e.category !== STOCK_CATEGORY).reduce((t, e) => t + e.amount, 0)
+  for (const e of exp) if (isCost(e)) daily[idx(e.createdAt)].profit -= e.amount
+  const spent = exp.filter(isCost).reduce((t, e) => t + e.amount, 0)
   const stockBought = exp.filter((e) => e.category === STOCK_CATEGORY).reduce((t, e) => t + e.amount, 0)
   const catMap = new Map<string, number>()
   for (const e of exp) catMap.set(e.category, (catMap.get(e.category) ?? 0) + e.amount)
@@ -106,8 +105,9 @@ export function buildDashboard(
     b.people++
   }
 
-  const out = products.filter((p) => p.stock <= 0).length
-  const low = products.filter((p) => p.stock > 0 && p.stock <= p.lowAt).length
+  const goods = products.filter((p) => p.kind !== 'service')
+  const out = goods.filter((p) => p.stock <= 0).length
+  const low = goods.filter((p) => p.stock > 0 && p.stock <= p.lowAt).length
 
   return {
     days,
@@ -116,11 +116,10 @@ export function buildDashboard(
     sales: sales_,
     salesPrev: prev.reduce((t, s) => t + s.total, 0),
     count: inRange.length,
-    profit,
-    costedShare: sales_ > 0 ? costed / sales_ : 0,
+    profit: earned - spent,
+    countedShare: sales_ > 0 ? (sales_ - unknown) / sales_ : 1,
     spent,
     stockBought,
-    net: profit - spent,
     collected: payments.filter((p) => p.createdAt >= from && p.createdAt < to).reduce((t, p) => t + p.amount, 0),
     creditGiven: split.credit,
     split,
@@ -132,10 +131,11 @@ export function buildDashboard(
     stock: {
       out,
       low,
-      ok: products.length - out - low,
-      atCost: products.reduce((t, p) => t + Math.max(0, p.stock) * p.cost, 0),
-      atPrice: products.reduce((t, p) => t + Math.max(0, p.stock) * p.price, 0),
-      total: products.length
+      ok: goods.length - out - low,
+      atCost: goods.reduce((t, p) => t + Math.max(0, p.stock) * p.cost, 0),
+      atPrice: goods.reduce((t, p) => t + Math.max(0, p.stock) * p.price, 0),
+      total: goods.length,
+      services: products.length - goods.length
     },
     spending: [...catMap.entries()].map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount)
   }

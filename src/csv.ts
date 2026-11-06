@@ -64,7 +64,8 @@ export function parseCsv(text: string): string[][] {
 }
 
 const norm = (h: string) => h.toLowerCase().replace(/[^a-z]/g, '')
-const SYN: Record<'name' | 'price' | 'cost' | 'stock' | 'low', string[]> = {
+const SYN: Record<'name' | 'price' | 'cost' | 'stock' | 'low' | 'type', string[]> = {
+  type: ['type', 'kind', 'itemtype', 'goodsorservice'],
   name: ['name', 'product', 'productname', 'item', 'itemname', 'description'],
   price: ['price', 'sellingprice', 'sellprice', 'selling', 'sp', 'retailprice'],
   cost: ['cost', 'buyingprice', 'buyprice', 'buying', 'bp', 'costprice'],
@@ -96,7 +97,7 @@ export function readProducts(table: string[][]): ImportPreview {
   }
   const head = table[0].map(norm)
   const at = (k: keyof typeof SYN) => head.findIndex((h) => SYN[k].includes(h))
-  const col = { name: at('name'), price: at('price'), cost: at('cost'), stock: at('stock'), low: at('low') }
+  const col = { name: at('name'), price: at('price'), cost: at('cost'), stock: at('stock'), low: at('low'), type: at('type') }
   if (col.name < 0) out.missingColumns.push('Name')
   if (col.price < 0) out.missingColumns.push('Price')
   if (out.missingColumns.length) return out
@@ -126,6 +127,8 @@ export function readProducts(table: string[][]): ImportPreview {
       }
       return n
     }
+    const typeRaw = col.type >= 0 ? (r[col.type] ?? '').trim().toLowerCase() : ''
+    const service = /serv|food|made|meal|cook|prepared/.test(typeRaw)
     const cost = num(col.cost, 'buying price')
     const stock = num(col.stock, 'stock')
     const low = num(col.low, 'warn level')
@@ -140,12 +143,13 @@ export function readProducts(table: string[][]): ImportPreview {
     out.rows.push({
       name,
       price,
-      cost: cost ?? 0,
-      stock: Math.round(stock ?? 0),
-      lowAt: Math.round(low ?? 5),
-      hasCost: cost !== null,
-      hasStock: stock !== null,
-      hasLow: low !== null
+      cost: service ? 0 : cost ?? 0,
+      stock: service ? 0 : Math.round(stock ?? 0),
+      lowAt: service ? 0 : Math.round(low ?? 5),
+      hasCost: service || cost !== null,
+      hasStock: service || stock !== null,
+      hasLow: service || low !== null,
+      service
     })
   }
   out.rows = out.rows.filter(Boolean)
@@ -153,7 +157,8 @@ export function readProducts(table: string[][]): ImportPreview {
 }
 
 export const TEMPLATE = toCsv([
-  ['Name', 'Selling price', 'Buying price', 'In stock', 'Warn at'],
-  ['Sugar 1kg', 180, 160, 24, 5],
-  ['Cooking oil 1L', 320, 290, 12, 4]
+  ['Name', 'Type', 'Selling price', 'Buying price', 'In stock', 'Warn at'],
+  ['Sugar 1kg', 'Goods', 180, 160, 24, 5],
+  ['Cooking oil 1L', 'Goods', 320, 290, 12, 4],
+  ['Porridge cup', 'Service', 30, '', '', '']
 ])

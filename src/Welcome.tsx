@@ -8,7 +8,8 @@ const CHOICES: { kind: StarterKind; title: string; hint: string }[] = [
   { kind: 'grocery', title: 'Groceries and household', hint: 'Flour, sugar, oil, soap and similar' },
   { kind: 'hardware', title: 'Hardware', hint: 'Nails, cement, paint, bulbs and similar' },
   { kind: 'beauty', title: 'Cosmetics and beauty', hint: 'Lotion, soap, shampoo and similar' },
-  { kind: 'none', title: 'I’ll add my own', hint: 'Start with an empty shelf' }
+  { kind: 'food', title: 'Food and drinks I make', hint: 'Porridge, tea, meals. No stock count; ingredients go under Expenses' },
+  { kind: 'none', title: 'I’ll add my own', hint: 'Start with an empty list' }
 ]
 
 export function Welcome({ onDone }: { onDone: (shop: string) => void }) {

@@ -1,12 +1,22 @@
 import { db, type Product } from './db'
 
-export type StarterKind = 'grocery' | 'hardware' | 'beauty' | 'none'
+export type StarterKind = 'grocery' | 'hardware' | 'beauty' | 'food' | 'none'
 
 // name, selling price, buying price, example stock, warn at
 type Row = [string, number, number, number, number]
 
 // Sample prices only. The owner edits these to match their shop.
-const LISTS: Record<Exclude<StarterKind, 'none'>, Row[]> = {
+// Food and services have no buying price or count: their costs are recorded as expenses.
+const FOOD: [string, number][] = [
+  ['Porridge cup', 30],
+  ['Tea', 30],
+  ['Mandazi', 10],
+  ['Chapati', 20],
+  ['Beans and rice', 120],
+  ['Ugali and stew', 150]
+]
+
+const LISTS: Record<Exclude<StarterKind, 'none' | 'food'>, Row[]> = {
   grocery: [
     ['Maize flour 2kg', 150, 138, 24, 6],
     ['Wheat flour 2kg', 185, 170, 12, 4],
@@ -48,6 +58,12 @@ const LISTS: Record<Exclude<StarterKind, 'none'>, Row[]> = {
 export async function seedStarter(kind: StarterKind): Promise<void> {
   if (kind === 'none') return
   const now = Date.now()
+  if (kind === 'food') {
+    await db.products.bulkAdd(
+      FOOD.map(([name, price], i) => ({ name, price, cost: 0, stock: 0, lowAt: 0, kind: 'service', createdAt: now + i })) as Product[]
+    )
+    return
+  }
   const rows = LISTS[kind].map(
     ([name, price, cost, stock, lowAt], i): Omit<Product, 'id'> => ({
       name,

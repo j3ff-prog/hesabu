@@ -1,5 +1,6 @@
 import type { Expense, Payment, Product, Sale } from './db'
 import { dateLabel, money } from './format'
+import { isCost, lineProfit } from './profit'
 
 export interface DayFigures {
   live: Sale[] // sales that were not cancelled
@@ -11,21 +12,21 @@ export interface DayFigures {
   cashCollected: number
   spent: number
   cashSpent: number
-  profit: number // only counts items that have a buying price
-  hasCost: boolean
+  profit: number // see profit.ts
+  hasCost: boolean // there is something to base a profit on
 }
 
 export function dayFigures(sales: Sale[], payments: Payment[], expenses: Expense[]): DayFigures {
   const live = sales.filter((s) => !s.voidedAt)
   const by = (m: string) => live.filter((s) => s.method === m).reduce((t, s) => t + s.total, 0)
-  let profit = 0
+  let earned = 0
   let hasCost = false
   for (const s of live)
-    for (const l of s.lines)
-      if (l.cost > 0) {
-        hasCost = true
-        profit += (l.price - l.cost) * l.qty
-      }
+    for (const l of s.lines) {
+      const p = lineProfit(l)
+      if (p.margin || p.income) hasCost = true
+      earned += p.margin + p.income
+    }
   const sum = (xs: { amount: number }[]) => xs.reduce((t, x) => t + x.amount, 0)
   return {
     live,
@@ -37,7 +38,7 @@ export function dayFigures(sales: Sale[], payments: Payment[], expenses: Expense
     cashCollected: sum(payments.filter((p) => p.method === 'cash')),
     spent: sum(expenses),
     cashSpent: sum(expenses.filter((e) => e.method === 'cash')),
-    profit,
+    profit: earned - sum(expenses.filter(isCost)),
     hasCost
   }
 }

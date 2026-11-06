@@ -60,9 +60,11 @@ export function DataSheet({ onClose }: { onClose: () => void }) {
 
   const stock = async () => {
     const list = await db.products.orderBy('name').toArray()
-    const rows: (string | number)[][] = [['Name', 'Selling price', ...(cost ? ['Buying price'] : []), 'In stock', 'Warn at', ...(cost ? ['Stock value at buying price'] : []), 'Status']]
-    for (const p of list)
-      rows.push([p.name, p.price, ...(cost ? [p.cost || ''] : []), p.stock, p.lowAt, ...(cost ? [Math.max(0, p.stock) * p.cost] : []), p.stock <= 0 ? 'Out of stock' : p.stock <= p.lowAt ? 'Running low' : 'Fine'])
+    const rows: (string | number)[][] = [['Name', 'Type', 'Selling price', ...(cost ? ['Buying price'] : []), 'In stock', 'Warn at', ...(cost ? ['Stock value at buying price'] : []), 'Status']]
+    for (const p of list) {
+      const sv = p.kind === 'service'
+      rows.push([p.name, sv ? 'Service' : 'Goods', p.price, ...(cost ? [sv ? '' : p.cost || ''] : []), sv ? '' : p.stock, sv ? '' : p.lowAt, ...(cost ? [sv ? '' : Math.max(0, p.stock) * p.cost] : []), sv ? 'Not counted' : p.stock <= 0 ? 'Out of stock' : p.stock <= p.lowAt ? 'Running low' : 'Fine'])
+    }
     if (rows.length > 1) downloadFile(`${slug}-stock-${stamp()}.csv`, toCsv(rows))
     done('stock', rows.length - 1)
   }
@@ -108,7 +110,7 @@ export function DataSheet({ onClose }: { onClose: () => void }) {
           </div>
           <div className="dl-list">
             <button className="btn outline block" onClick={sales}>Sales</button>
-            <button className="btn outline block" onClick={stock}>Stock</button>
+            <button className="btn outline block" onClick={stock}>Items and stock</button>
             <button className="btn outline block" onClick={credit}>Who owes you</button>
             <button className="btn outline block" onClick={payments}>Credit payments</button>
             {can('expenses') && <button className="btn outline block" onClick={expenses}>Expenses</button>}
@@ -165,8 +167,8 @@ function Upload({ onDone }: { onDone: (m: string) => void }) {
 
   return (
     <>
-      <h3 className="muted-head">Add many products at once</h3>
-      <p className="hint spaced">Fill in a spreadsheet, save it as CSV, and upload it. Only Name and Price are needed.</p>
+      <h3 className="muted-head">Add many items at once</h3>
+      <p className="hint spaced">Fill in a spreadsheet, save it as CSV, and upload it. Only Name and Selling price are needed. Put Service in the Type column for food and services.</p>
       <button className="btn outline block" onClick={() => downloadFile('hesabu-stock-template.csv', TEMPLATE)}>Download the template</button>
       <input ref={fileRef} type="file" accept=".csv,text/csv,.txt,.xlsx,.xls" hidden onChange={(e) => void pick(e.target.files?.[0])} />
       {!preview && (

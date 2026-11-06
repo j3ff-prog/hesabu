@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { customerKey, db, recordSale, voidSale, type Method, type Product } from './db'
+import { customerKey, db, recordSale, voidSale, type Method, type Product, isService } from './db'
 import { money, methodLabel } from './format'
 import { Sheet } from './Sheet'
 import { MinusIcon, PlusIcon, SearchIcon } from './Icons'
@@ -54,10 +54,10 @@ export function Sell() {
       <main className="page">
         <h1>Sell</h1>
         <div className="empty">
-          <p className="empty-title">No products yet</p>
-          <p>Add what you sell, with its price and how many you have. Then you can record sales in a few taps.</p>
+          <p className="empty-title">Nothing to sell yet</p>
+          <p>Add what you sell with its price: goods you stock, or food and services you provide. Then you can record sales in a few taps.</p>
           <Link className="btn primary" to="/stock">
-            Add products
+            Add items
           </Link>
         </div>
       </main>
@@ -124,17 +124,20 @@ export function Sell() {
 }
 
 function Tile({ p, qty, onAdd, onSub }: { p: Product; qty: number; onAdd: () => void; onSub: () => void }) {
-  const out = p.stock <= 0
-  const low = !out && p.stock <= p.lowAt
+  const service = isService(p)
+  const out = !service && p.stock <= 0
+  const low = !service && !out && p.stock <= p.lowAt
   const inCart = qty > 0
   return (
     <div className={'tile' + (inCart ? ' in-cart' : '')}>
       <button className="tile-main" onClick={onAdd} aria-label={`Add ${p.name}, KES ${p.price}`}>
         <span className="tile-name">{p.name}</span>
         <span className="tile-price">KES {money(p.price)}</span>
-        <span className={'tile-stock' + (out || low ? ' warn' : '')}>
-          {out ? 'Out of stock' : low ? `Only ${p.stock} left` : `${p.stock} in stock`}
-        </span>
+        {!service && (
+          <span className={'tile-stock' + (out || low ? ' warn' : '')}>
+            {out ? 'Out of stock' : low ? `Only ${p.stock} left` : `${p.stock} in stock`}
+          </span>
+        )}
       </button>
       {inCart && (
         <div className="tile-step">
@@ -182,7 +185,7 @@ function Checkout({
     const typed = customer.trim()
     const who = typed ? known.find((k) => k.key === customerKey(typed))?.name ?? typed : undefined
     const { id, total: t } = await recordSale(
-      lines.map(({ p, qty }) => ({ productId: p.id, name: p.name, qty, price: p.price, cost: p.cost })),
+      lines.map(({ p, qty }) => ({ productId: p.id, name: p.name, qty, price: p.price, cost: p.cost, ...(isService(p) ? { service: true } : {}) })),
       method,
       who
     )

@@ -10,9 +10,14 @@ export interface Product {
   stock: number
   lowAt: number // warn when stock is at or below this
   createdAt: number
+  /** 'service' = food you make or a service you give: no stock count, no buying price. Missing means goods. */
+  kind?: 'goods' | 'service'
 }
 
+export const isService = (p: { kind?: string }): boolean => p.kind === 'service'
+
 export interface SaleLine {
+  service?: boolean // food or a service: counted as income, costs come from expenses
   productId: number
   name: string
   qty: number
@@ -37,7 +42,7 @@ export interface Customer {
   phone?: string // saved as 2547XXXXXXXX
 }
 
-export const CATEGORIES = ['New stock', 'Transport', 'Rent', 'Electricity', 'Salary', 'Other'] as const
+export const CATEGORIES = ['New stock', 'Ingredients', 'Transport', 'Rent', 'Electricity', 'Salary', 'Other'] as const
 export const STOCK_CATEGORY = 'New stock'
 
 /** One product bought in a "New stock" expense. */
@@ -175,7 +180,7 @@ export async function recordSale(
     } as Sale)
     for (const l of lines) {
       const p = await db.products.get(l.productId)
-      if (p) await db.products.update(l.productId, { stock: p.stock - l.qty })
+      if (p && !l.service) await db.products.update(l.productId, { stock: p.stock - l.qty })
     }
     return { id, total }
   })
@@ -189,7 +194,7 @@ export async function voidSale(id: number): Promise<void> {
     await db.sales.update(id, { voidedAt: Date.now() })
     for (const l of sale.lines) {
       const p = await db.products.get(l.productId)
-      if (p) await db.products.update(l.productId, { stock: p.stock + l.qty })
+      if (p && !l.service) await db.products.update(l.productId, { stock: p.stock + l.qty })
     }
   })
 }
@@ -250,7 +255,7 @@ export async function addExpense(input: ExpenseInput): Promise<number> {
     } as Expense)
     for (const i of items) {
       const p = await db.products.get(i.productId)
-      if (!p) continue
+      if (!p || isService(p)) continue
       await db.products.update(i.productId, { stock: p.stock + i.qty, ...(i.cost > 0 ? { cost: i.cost } : {}) })
     }
     return id
@@ -281,6 +286,7 @@ export interface ProductRow {
   hasCost: boolean
   hasStock: boolean
   hasLow: boolean
+  service: boolean
 }
 
 export const productKey = (name: string): string => name.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -301,6 +307,7 @@ export async function importProducts(rows: ProductRow[], updateExisting: boolean
         }
         await db.products.update(found.id, {
           price: r.price,
+          kind: r.service ? 'service' : 'goods',
           ...(r.hasCost ? { cost: r.cost } : {}),
           ...(r.hasStock ? { stock: r.stock } : {}),
           ...(r.hasLow ? { lowAt: r.lowAt } : {})
@@ -313,6 +320,7 @@ export async function importProducts(rows: ProductRow[], updateExisting: boolean
           cost: r.cost,
           stock: r.stock,
           lowAt: r.hasLow ? r.lowAt : 5,
+          ...(r.service ? { kind: 'service' as const } : {}),
           createdAt: Date.now()
         } as Product)) as number
         existing.set(productKey(r.name), { id } as Product)

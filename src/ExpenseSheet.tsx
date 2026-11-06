@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { addExpense, CATEGORIES, db, deleteExpense, STOCK_CATEGORY, type Expense, type Product, type RestockLine } from './db'
+import { addExpense, CATEGORIES, db, deleteExpense, isService, STOCK_CATEGORY, type Expense, type Product, type RestockLine } from './db'
 import { money, timeOf, shortDate, toNum } from './format'
 import { Sheet } from './Sheet'
 import { SearchIcon } from './Icons'
@@ -33,7 +33,7 @@ export function ExpenseSheet({ onClose, onSaved }: { onClose: () => void; onSave
     const n = q.trim().toLowerCase()
     if (!n || !products) return []
     const taken = new Set(lines.map((l) => l.p.id))
-    return products.filter((p) => !taken.has(p.id) && p.name.toLowerCase().includes(n)).slice(0, 6)
+    return products.filter((p) => !isService(p) && !taken.has(p.id) && p.name.toLowerCase().includes(n)).slice(0, 6)
   }, [q, products, lines])
 
   const patch = (id: number, k: 'qty' | 'cost', v: string) =>
@@ -68,6 +68,10 @@ export function ExpenseSheet({ onClose, onSaved }: { onClose: () => void; onSave
         </div>
       </div>
 
+      {category === 'Ingredients' && (
+        <p className="hint">Flour, milk, cooking gas and other things you use up to make food. They are taken off your profit, so Hesabu can show what your food and services really earn.</p>
+      )}
+
       {restock && (
         <div className="restock">
           <p className="hint">Pick what you bought. The stock goes up by these amounts and the buying price is updated.</p>
@@ -75,7 +79,7 @@ export function ExpenseSheet({ onClose, onSaved }: { onClose: () => void; onSave
             <SearchIcon />
             <input type="search" placeholder="Search your products" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search your products" />
           </label>
-          {q.trim() && matches.length === 0 && <p className="hint">No product matches. Add it in Stock first.</p>}
+          {q.trim() && matches.length === 0 && <p className="hint">No goods match. Add the item under Items first.</p>}
           {matches.length > 0 && (
             <ul className="picks">
               {matches.map((p) => (

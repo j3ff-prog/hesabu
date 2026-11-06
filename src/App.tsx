@@ -143,7 +143,7 @@ function Shell({ shop, setShop }: { shop: string; setShop: (n: string) => void }
               {can('viewStock') && (
                 <NavLink to="/stock">
                   <StockIcon />
-                  <span>Stock</span>
+                  <span>Items</span>
                 </NavLink>
               )}
               {can('credit') && (

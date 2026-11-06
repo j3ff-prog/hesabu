@@ -73,17 +73,21 @@ export function Dashboard() {
         {can('seeCost') && (
           <div className="kpi">
             <p className="kpi-label">Profit</p>
-            <p className="kpi-num good">KES {money(d.profit)}</p>
+            <p className={'kpi-num ' + (d.profit < 0 ? 'bad' : 'good')}>KES {money(d.profit)}</p>
             <p className="kpi-sub">
-              {d.sales === 0 ? 'No sales yet' : d.costedShare < 0.999 ? `Only counts ${Math.round(d.costedShare * 100)}% of sales that have a buying price` : 'Selling minus buying price'}
+              {d.sales === 0
+                ? 'No sales yet'
+                : d.countedShare < 0.999
+                  ? `Based on ${Math.round(d.countedShare * 100)}% of sales. Goods without a buying price are left out.`
+                  : 'After costs and expenses'}
             </p>
           </div>
         )}
-        {can('expenses') && can('seeCost') && (
+        {can('expenses') && (
           <div className="kpi">
-            <p className="kpi-label">Left after expenses</p>
-            <p className={'kpi-num ' + (d.net < 0 ? 'bad' : '')}>KES {money(d.net)}</p>
-            <p className="kpi-sub">Spent KES {money(d.spent)} on running costs</p>
+            <p className="kpi-label">Spent on costs</p>
+            <p className="kpi-num">KES {money(d.spent)}</p>
+            <p className="kpi-sub">Ingredients, rent, transport and the like{d.stockBought > 0 ? `. Not counting KES ${money(d.stockBought)} of new stock.` : ''}</p>
           </div>
         )}
         <div className="kpi">
@@ -100,7 +104,7 @@ export function Dashboard() {
         </Card>
 
         {can('seeCost') && (
-          <Card title="Profit each day" sub="Selling price minus buying price">
+          <Card title="Profit each day" sub="After costs and expenses. Days with a loss show as empty.">
             <BarChart data={profitBars} label="Profit each day" />
           </Card>
         )}
@@ -128,7 +132,7 @@ export function Dashboard() {
           />
         </Card>
 
-        <Card title="Stock" sub={`${d.stock.total} products`}>
+        <Card title="Stock" sub={`${d.stock.total} goods counted${d.stock.services ? `, ${d.stock.services} food or service items not counted` : ''}`}>
           <SplitBar parts={[
             { name: 'Fine', value: d.stock.ok, color: COLORS.cash },
             { name: 'Running low', value: d.stock.low, color: COLORS.mpesa },

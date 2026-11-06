@@ -2073,3 +2073,9 @@ h2 {
     grid-column: span 1;
   }
 }
+
+.row-tag.plain {
+  color: var(--muted);
+  background: transparent;
+  font-weight: 500;
+}

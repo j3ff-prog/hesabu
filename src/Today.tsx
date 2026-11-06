@@ -31,7 +31,7 @@ export function Today({ shop }: { shop: string }) {
   const mine = full ? sales : sales.filter((s) => s.by === me.id)
   const f = dayFigures(mine, full ? payments : [], full ? expenses : [])
   const cancelled = mine.filter((s) => s.voidedAt)
-  const low = products.filter((p) => p.stock <= p.lowAt).sort((a, b) => a.stock - b.stock)
+  const low = products.filter((p) => p.kind !== 'service' && p.stock <= p.lowAt).sort((a, b) => a.stock - b.stock)
 
   const best = new Map<string, { name: string; qty: number }>()
   for (const s of f.live)
@@ -69,7 +69,7 @@ export function Today({ shop }: { shop: string }) {
         </dl>
         {full && f.collected > 0 && <p className="hero-collected">Collected from credit KES {money(f.collected)}</p>}
         {full && f.spent > 0 && <p className="hero-collected">Spent KES {money(f.spent)}</p>}
-        {full && can('seeCost') && f.hasCost && <p className="hero-profit">Estimated profit KES {money(f.profit)} before expenses</p>}
+        {full && can('seeCost') && f.hasCost && <p className="hero-profit">Estimated profit KES {money(f.profit)} after expenses</p>}
       </section>
 
       {full && (
