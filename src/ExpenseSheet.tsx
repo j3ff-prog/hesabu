@@ -36,7 +36,7 @@ export function ExpenseSheet({ onClose, onSaved }: { onClose: () => void; onSave
     return products.filter((p) => !isService(p) && !taken.has(p.id) && p.name.toLowerCase().includes(n)).slice(0, 6)
   }, [q, products, lines])
 
-  const patch = (id: number, k: 'qty' | 'cost', v: string) =>
+  const patch = (id: string, k: 'qty' | 'cost', v: string) =>
     setLines((ls) => ls.map((l) => (l.p.id === id ? { ...l, [k]: v } : l)))
 
   const save = async () => {

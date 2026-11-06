@@ -1,4 +1,4 @@
-import { db, type Product } from './db'
+import { db, changed, newId, type Product } from './db'
 
 export type StarterKind = 'grocery' | 'hardware' | 'beauty' | 'food' | 'none'
 
@@ -60,12 +60,16 @@ export async function seedStarter(kind: StarterKind): Promise<void> {
   const now = Date.now()
   if (kind === 'food') {
     await db.products.bulkAdd(
-      FOOD.map(([name, price], i) => ({ name, price, cost: 0, stock: 0, lowAt: 0, kind: 'service', createdAt: now + i })) as Product[]
+      FOOD.map(([name, price], i) => ({ id: newId(), dirty: 1, rev: 1, name, price, cost: 0, stock: 0, lowAt: 0, kind: 'service', createdAt: now + i })) as Product[]
     )
+    changed()
     return
   }
   const rows = LISTS[kind].map(
-    ([name, price, cost, stock, lowAt], i): Omit<Product, 'id'> => ({
+    ([name, price, cost, stock, lowAt], i): Product => ({
+      id: newId(),
+      dirty: 1,
+      rev: 1,
       name,
       price,
       cost,
@@ -74,5 +78,6 @@ export async function seedStarter(kind: StarterKind): Promise<void> {
       createdAt: now + i
     })
   )
-  await db.products.bulkAdd(rows as Product[])
+  await db.products.bulkAdd(rows)
+  changed()
 }

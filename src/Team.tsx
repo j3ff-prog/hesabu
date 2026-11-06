@@ -1,49 +1,63 @@
-import { useState } from 'react'
-import { db, saveUser, updateUser, type Role, type User } from './db'
+import { useCallback, useEffect, useState } from 'react'
+import type { Role } from './db'
 import { useAuth } from './Auth'
+import { api } from './api'
+import { ApiError, type Member } from './cloudApi'
 import { MATRIX, RIGHTS_TABLE, ROLE_HINT, ROLE_LABEL } from './rights'
-import { hashPin, newSalt, recoveryCode, saveRecovery, hasRecovery, tempPin, validPin, clearFail } from './pin'
+import { tempPin, validPin } from './pin'
 import { showPhone, toWaNumber } from './format'
 import { openWhatsApp, waLink } from './summary'
 import { Sheet } from './Sheet'
-import { useShop } from './shop'
-import { getOwnerPhone } from './shop'
 
-/** Add staff, set their role, give them a temporary PIN, and send the login details on WhatsApp. */
+const errText = (e: unknown): string => {
+  if (e instanceof ApiError) return e.code === 'network' ? 'No internet. Connect and try again.' : e.message
+  return 'Something went wrong. Try again.'
+}
+
+/** Add staff, set their role, give them a PIN, and send the login details on WhatsApp. */
 export function TeamSheet({ onClose }: { onClose: () => void }) {
-  const { users, teamOn, me } = useAuth()
-  const [adding, setAdding] = useState<null | 'owner' | 'staff'>(null)
-  const [edit, setEdit] = useState<User | null>(null)
+  const { shopId, shopName, me } = useAuth()
+  const [list, setList] = useState<Member[] | null>(null)
+  const [err, setErr] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [edit, setEdit] = useState<Member | null>(null)
 
-  if (!teamOn && !adding) {
-    return (
-      <Sheet title="Team" onClose={onClose}>
-        <p>Right now anyone holding this phone can see everything. Protect the shop with your own PIN, then add your staff.</p>
-        <p className="hint spaced">Attendants will only be able to sell, see stock and take credit payments. They won’t see buying prices, profit or expenses.</p>
-        <button className="btn primary block" onClick={() => setAdding('owner')}>Set my PIN</button>
-      </Sheet>
-    )
-  }
-  if (adding === 'owner') return <OwnerSetup onClose={onClose} />
-  if (adding === 'staff') return <StaffForm onClose={() => setAdding(null)} />
-  if (edit) return <EditUser user={edit} isMe={edit.id === me.id} onClose={() => setEdit(null)} />
+  const load = useCallback(async () => {
+    try {
+      setList(await api.members(shopId))
+      setErr('')
+    } catch (e) {
+      setErr(errText(e))
+    }
+  }, [shopId])
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  if (adding) return <StaffForm shopId={shopId} shopName={shopName} onClose={() => { setAdding(false); void load() }} />
+  if (edit) return <EditMember shopId={shopId} shopName={shopName} member={edit} isMe={edit.userId === me.id} onClose={() => { setEdit(null); void load() }} />
 
   return (
     <Sheet title="Team" onClose={onClose}>
-      <ul className="people">
-        {users.map((u) => (
-          <li key={u.id}>
-            <button className={'person' + (u.active ? '' : ' off')} onClick={() => setEdit(u)}>
-              <span className="avatar">{u.name.trim()[0]?.toUpperCase()}</span>
-              <span className="person-main">
-                <span className="person-name">{u.name}{u.id === me.id ? ' (you)' : ''}</span>
-                <span className="muted">{ROLE_LABEL[u.role]} · {showPhone(u.phone)}{u.active ? '' : ' · Switched off'}</span>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      <button className="btn primary block" onClick={() => setAdding('staff')}>Add a person</button>
+      {err && <p className="hint warn-text" role="alert">{err}</p>}
+      {!list && !err && <p className="muted">Loading…</p>}
+      {list && (
+        <ul className="people">
+          {list.map((u) => (
+            <li key={u.userId}>
+              <button className={'person' + (u.active ? '' : ' off')} onClick={() => setEdit(u)} disabled={u.role === 'owner' && u.userId !== me.id}>
+                <span className="avatar">{u.name.trim()[0]?.toUpperCase()}</span>
+                <span className="person-main">
+                  <span className="person-name">{u.name}{u.userId === me.id ? ' (you)' : ''}</span>
+                  <span className="muted">{ROLE_LABEL[u.role]} · {showPhone(u.phone)}{u.active ? '' : ' · Switched off'}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button className="btn primary block" onClick={() => setAdding(true)}>Add a person</button>
+      <p className="hint spaced">Each person signs in on their own phone with their number and PIN. Their sales are saved under their name.</p>
 
       <h3 className="muted-head">What each role can do</h3>
       <table className="rights">
@@ -63,125 +77,91 @@ export function TeamSheet({ onClose }: { onClose: () => void }) {
           ))}
         </tbody>
       </table>
-      <p className="hint spaced">
-        Staff sign in on this phone with their name and PIN. Staff using their own phones will need online sync, which comes later.
-      </p>
     </Sheet>
   )
 }
 
-function OwnerSetup({ onClose }: { onClose: () => void }) {
-  const { startSession, claimOwner } = useAuth()
-  const [name, setName] = useState('')
-  const [pin, setPin] = useState('')
-  const [phone, setPhone] = useState(getOwnerPhone() ? showPhone(getOwnerPhone()) : '')
-  const [code, setCode] = useState('')
-  const [newId, setNewId] = useState(0)
-  const wa = toWaNumber(phone)
-  const ok = name.trim().length >= 2 && validPin(pin) && !!wa
+const loginText = (shop: string, name: string, phone: string, pin: string): string =>
+  `Hello ${name}, you can now use Hesabu for ${shop}.\n\nOpen the app, choose "Sign in", and use:\nPhone: ${showPhone(phone)}\nPIN: ${pin}\n\nYou can change your PIN from the menu after you sign in.`
 
-  if (code) {
-    return (
-      <Sheet title="Keep this code safe" onClose={() => startSession(newId) ?? onClose()}>
-        <p>If you ever forget your PIN, this code lets you choose a new one. It is shown only once.</p>
-        <p className="recovery">{code}</p>
-        <p className="hint spaced">Write it down or send it to yourself on WhatsApp. Don’t leave it in the shop.</p>
-        <button className="btn primary block" onClick={() => { startSession(newId); onClose() }}>I have saved it</button>
-      </Sheet>
-    )
-  }
+function PinCard({ shop, name, phone, pin, onDone }: { shop: string; name: string; phone: string; pin: string; onDone: () => void }) {
   return (
-    <Sheet title="Set my PIN" onClose={onClose}>
-      <label className="field">
-        <span>Your name</span>
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
-      </label>
-      <label className="field">
-        <span>Your phone number</span>
-        <input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712 345 678" />
-      </label>
-      <label className="field">
-        <span>PIN (4 to 6 digits)</span>
-        <input className="pin-input" type="password" inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
-      </label>
-      <button
-        className="btn primary block"
-        disabled={!ok}
-        onClick={async () => {
-          const salt = newSalt()
-          claimOwner()
-          const id = await saveUser({
-            name: name.trim(), phone: wa!, role: 'owner', salt, pinHash: await hashPin(pin, salt),
-            mustChange: false, active: true, createdAt: Date.now()
-          })
-          const c = recoveryCode()
-          await saveRecovery(c)
-          setNewId(id)
-          setCode(c)
-        }}
-      >
-        Save and protect the shop
-      </button>
-    </Sheet>
+    <>
+      <p>
+        <strong>{name}</strong> can now sign in with <strong>{showPhone(phone)}</strong> and the PIN:
+      </p>
+      <p className="temp-pin" aria-label="PIN">{pin}</p>
+      <p className="hint">Send it to them now. For safety it is not shown again.</p>
+      <button className="btn amber block" onClick={() => openWhatsApp(waLink(phone, loginText(shop, name, phone, pin)))}>Send on WhatsApp</button>
+      <button className="btn outline block gap-top" onClick={onDone}>Done</button>
+    </>
   )
 }
 
-function StaffForm({ onClose }: { onClose: () => void }) {
-  const { users } = useAuth()
-  const [shop] = useShop()
+function StaffForm({ shopId, shopName, onClose }: { shopId: string; shopName: string; onClose: () => void }) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
-  const [role, setRole] = useState<Role>('attendant')
-  const [made, setMade] = useState<{ name: string; phone: string; pin: string; role: Role } | null>(null)
+  const [role, setRole] = useState<'manager' | 'attendant'>('attendant')
+  const [pin, setPin] = useState(tempPin)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [made, setMade] = useState<{ existing: boolean } | null>(null)
   const wa = toWaNumber(phone)
-  const dup = wa ? users.some((u) => u.phone === wa) : false
-  const ok = name.trim().length >= 2 && !!wa && !dup
+  const ok = name.trim().length >= 2 && !!wa && validPin(pin)
 
-  if (made) {
-    const msg = `Hello ${made.name}, you have been added to ${shop} on Hesabu as ${ROLE_LABEL[made.role]}.\nOpen the Hesabu app, choose your name and type this PIN: ${made.pin}\nYou will be asked to choose your own PIN the first time.`
+  if (made && wa)
     return (
       <Sheet title="Person added" onClose={onClose}>
-        <p><strong>{made.name}</strong> can now sign in.</p>
-        <p className="muted">Temporary PIN</p>
-        <p className="recovery">{made.pin}</p>
-        <p className="hint spaced">They will choose their own PIN the first time they sign in. Tell them the PIN or send it on WhatsApp.</p>
-        <button className="btn primary block" onClick={() => openWhatsApp(waLink(made.phone, msg))}>Send login details on WhatsApp</button>
-        <button className="btn plain-btn block" onClick={onClose}>Done</button>
+        {made.existing ? (
+          <>
+            <p><strong>{name}</strong> already has a Hesabu account, so they keep their own PIN. They can open the app and choose your shop.</p>
+            <button className="btn primary block" onClick={onClose}>Done</button>
+          </>
+        ) : (
+          <PinCard shop={shopName} name={name.trim()} phone={wa} pin={pin} onDone={onClose} />
+        )}
       </Sheet>
     )
-  }
+
   return (
     <Sheet title="Add a person" onClose={onClose}>
       <label className="field">
         <span>Name</span>
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Wanjiru" autoComplete="off" />
       </label>
       <label className="field">
-        <span>Phone number (no email needed)</span>
+        <span>Phone number</span>
         <input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712 345 678" />
+        {phone.trim() && !wa && <small className="hint warn-text">Enter a Kenyan number like 0712 345 678.</small>}
       </label>
-      {phone.trim() && !wa && <p className="hint warn-text">Enter a Kenyan number like 0712 345 678.</p>}
-      {dup && <p className="hint warn-text">Someone with this number is already on your team.</p>}
       <fieldset className="field">
         <legend>Role</legend>
         <div className="segment" role="radiogroup">
-          {(['attendant', 'manager'] as Role[]).map((r) => (
+          {(['attendant', 'manager'] as const).map((r) => (
             <button key={r} role="radio" aria-checked={role === r} className={role === r ? 'on' : ''} onClick={() => setRole(r)}>{ROLE_LABEL[r]}</button>
           ))}
         </div>
         <p className="hint spaced">{ROLE_HINT[role]}</p>
       </fieldset>
+      <label className="field">
+        <span>Their PIN (6 digits)</span>
+        <input className="pin-input" inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
+        <small className="hint">We made one up. You can change it. If they already use Hesabu, their own PIN stays.</small>
+      </label>
+      {err && <p className="hint warn-text" role="alert">{err}</p>}
       <button
         className="btn primary block"
-        disabled={!ok}
+        disabled={!ok || busy}
         onClick={async () => {
-          const pin = tempPin()
-          const salt = newSalt()
-          await saveUser({
-            name: name.trim(), phone: wa!, role, salt, pinHash: await hashPin(pin, salt),
-            mustChange: true, active: true, createdAt: Date.now()
-          })
-          setMade({ name: name.trim(), phone: wa!, pin, role })
+          if (!wa) return
+          setBusy(true)
+          setErr('')
+          try {
+            setMade(await api.addStaff(shopId, name.trim(), wa, role, pin))
+          } catch (e) {
+            setErr(errText(e))
+            setBusy(false)
+          }
         }}
       >
         Add person
@@ -190,68 +170,69 @@ function StaffForm({ onClose }: { onClose: () => void }) {
   )
 }
 
-function EditUser({ user, isMe, onClose }: { user: User; isMe: boolean; onClose: () => void }) {
-  const { users } = useAuth()
-  const [pin, setPin] = useState<string | null>(null)
-  const [sure, setSure] = useState(false)
-  const owners = users.filter((u) => u.role === 'owner' && u.active).length
-  const lastOwner = user.role === 'owner' && owners <= 1
+function EditMember({ shopId, shopName, member, isMe, onClose }: { shopId: string; shopName: string; member: Member; isMe: boolean; onClose: () => void }) {
+  const [role, setRole] = useState<Role>(member.role)
+  const [active, setActive] = useState(member.active)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [newPin, setNewPin] = useState<string | null>(null)
+  const isOwner = member.role === 'owner'
+
+  if (newPin)
+    return (
+      <Sheet title="New PIN" onClose={onClose}>
+        <PinCard shop={shopName} name={member.name} phone={member.phone} pin={newPin} onDone={onClose} />
+      </Sheet>
+    )
+
+  const run = async (f: () => Promise<void>) => {
+    setBusy(true)
+    setErr('')
+    try {
+      await f()
+    } catch (e) {
+      setErr(errText(e))
+      setBusy(false)
+    }
+  }
 
   return (
-    <Sheet title={user.name} onClose={onClose}>
-      <p className="muted">{ROLE_LABEL[user.role]} · {showPhone(user.phone)}</p>
-      {user.role !== 'owner' && (
-        <fieldset className="field">
-          <legend>Role</legend>
-          <div className="segment" role="radiogroup">
-            {(['attendant', 'manager'] as Role[]).map((r) => (
-              <button key={r} role="radio" aria-checked={user.role === r} className={user.role === r ? 'on' : ''} onClick={async () => { await updateUser(user.id, { role: r }); onClose() }}>{ROLE_LABEL[r]}</button>
-            ))}
-          </div>
-        </fieldset>
-      )}
-      {pin ? (
+    <Sheet title={member.name} onClose={onClose}>
+      <p className="muted">{ROLE_LABEL[member.role]} · {showPhone(member.phone)}</p>
+      {!isOwner && (
         <>
-          <p className="muted">New temporary PIN</p>
-          <p className="recovery">{pin}</p>
-          <p className="hint spaced">{user.name} will choose their own PIN at next sign-in.</p>
+          <fieldset className="field">
+            <legend>Role</legend>
+            <div className="segment" role="radiogroup">
+              {(['attendant', 'manager'] as const).map((r) => (
+                <button key={r} role="radio" aria-checked={role === r} className={role === r ? 'on' : ''} onClick={() => setRole(r)}>{ROLE_LABEL[r]}</button>
+              ))}
+            </div>
+            <p className="hint spaced">{ROLE_HINT[role]}</p>
+          </fieldset>
+          <label className="check">
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+            <span>Can use the app</span>
+          </label>
+          {!active && <p className="hint">Switched off people cannot sign in. Their old sales stay.</p>}
+          <button
+            className="btn primary block"
+            disabled={busy || (role === member.role && active === member.active)}
+            onClick={() => run(async () => { await api.setMember(shopId, member.userId, role as 'manager' | 'attendant', active); onClose() })}
+          >
+            Save changes
+          </button>
+          <button
+            className="btn outline block gap-top"
+            disabled={busy}
+            onClick={() => run(async () => { const p = tempPin(); await api.resetPin(shopId, member.phone, p); setNewPin(p); setBusy(false) })}
+          >
+            Set a new PIN for them
+          </button>
         </>
-      ) : (
-        <button
-          className="btn outline block"
-          onClick={async () => {
-            const p = tempPin()
-            const salt = newSalt()
-            await updateUser(user.id, { salt, pinHash: await hashPin(p, salt), mustChange: !isMe })
-            clearFail(user.id)
-            setPin(p)
-          }}
-        >
-          Give a new PIN
-        </button>
       )}
-      {!isMe && (
-        <button
-          className="btn outline block gap-top"
-          onClick={async () => { await updateUser(user.id, { active: !user.active }); onClose() }}
-        >
-          {user.active ? 'Switch off (can’t sign in)' : 'Switch back on'}
-        </button>
-      )}
-      {!isMe && !lastOwner && (
-        <button
-          className={'btn text-danger block' + (sure ? ' armed' : '')}
-          onClick={async () => {
-            if (!sure) return setSure(true)
-            await db.users.delete(user.id)
-            onClose()
-          }}
-        >
-          {sure ? 'Tap again to remove for good' : 'Remove person'}
-        </button>
-      )}
-      {!isMe && <p className="hint center">Their past sales stay in your records.</p>}
-      {isMe && !hasRecovery() && <p className="hint">No recovery code was saved for this PIN.</p>}
+      {isOwner && isMe && <p className="hint">You are the owner. Change your own PIN from the menu.</p>}
+      {err && <p className="hint warn-text" role="alert">{err}</p>}
     </Sheet>
   )
 }

@@ -1,12 +1,23 @@
 import Dexie, { type EntityTable } from 'dexie'
 
 export type Method = 'cash' | 'mpesa' | 'credit'
+export type Role = 'owner' | 'manager' | 'attendant'
 
-export interface Product {
-  id: number
+/**
+ * Every record has an id made on the device (a uuid), so phones never clash.
+ * `dirty` = changed here and not yet uploaded. `rev` goes up on every local change, so an upload only
+ * clears `dirty` if nothing changed while it was in flight.
+ */
+interface Synced {
+  dirty?: 0 | 1
+  rev?: number
+}
+
+export interface Product extends Synced {
+  id: string
   name: string
   price: number // selling price
-  cost: number // buying price, 0 if unknown
+  cost: number // buying price, 0 if unknown (attendants never receive it)
   stock: number
   lowAt: number // warn when stock is at or below this
   createdAt: number
@@ -17,26 +28,27 @@ export interface Product {
 export const isService = (p: { kind?: string }): boolean => p.kind === 'service'
 
 export interface SaleLine {
+  id: string
   service?: boolean // food or a service: counted as income, costs come from expenses
-  productId: number
+  productId: string
   name: string
   qty: number
   price: number
   cost: number
 }
 
-export interface Payment {
-  id: number
+export interface Payment extends Synced {
+  id: string
   customerKey: string
   customer: string
   amount: number
   method: 'cash' | 'mpesa'
   createdAt: number
-  by?: number // user id
+  by?: string // user id
   byName?: string
 }
 
-export interface Customer {
+export interface Customer extends Synced {
   key: string
   name: string
   phone?: string // saved as 2547XXXXXXXX
@@ -47,40 +59,27 @@ export const STOCK_CATEGORY = 'New stock'
 
 /** One product bought in a "New stock" expense. */
 export interface RestockLine {
-  productId: number
+  productId: string
   name: string
   qty: number
   cost: number // buying price per item
 }
 
-export interface Expense {
-  id: number
+export interface Expense extends Synced {
+  id: string
   amount: number
   note: string
   category: string
   method: 'cash' | 'mpesa'
   createdAt: number
   items?: RestockLine[] // set when the expense bought new stock
-  by?: number
+  sent?: 1 // the server has received this expense
+  by?: string
   byName?: string
 }
 
-export type Role = 'owner' | 'manager' | 'attendant'
-
-export interface User {
-  id: number
-  name: string
-  phone: string // 2547XXXXXXXX, how we identify the person
-  role: Role
-  salt: string
-  pinHash: string
-  mustChange: boolean // temporary PIN: choose a new one at first sign-in
-  active: boolean
-  createdAt: number
-}
-
 /** The cash count at the end of a day. One per day, keyed by the day's start time. */
-export interface Closing {
+export interface Closing extends Synced {
   day: number
   started: number // cash in the till at the start of the day
   expected: number // what the till should hold
@@ -89,147 +88,169 @@ export interface Closing {
   createdAt: number
 }
 
-export interface Sale {
-  id: number
+export interface Sale extends Synced {
+  id: string
   createdAt: number
   method: Method
   customer?: string
   total: number
   lines: SaleLine[]
+  sent?: 1 // the server has received this sale
   voidedAt?: number
-  by?: number
+  by?: string
   byName?: string
 }
 
-class HesabuDB extends Dexie {
+/** Something deleted here that the server still has. */
+export interface Deletion {
+  id: string // "table:rowId"
+  table: 'products' | 'payments' | 'expenses'
+  rowId: string
+}
+
+export interface Meta {
+  key: string
+  value: string
+}
+
+export class HesabuDB extends Dexie {
   products!: EntityTable<Product, 'id'>
   sales!: EntityTable<Sale, 'id'>
   payments!: EntityTable<Payment, 'id'>
   customers!: EntityTable<Customer, 'key'>
   expenses!: EntityTable<Expense, 'id'>
   closings!: EntityTable<Closing, 'day'>
-  users!: EntityTable<User, 'id'>
+  deletions!: EntityTable<Deletion, 'id'>
+  meta!: EntityTable<Meta, 'key'>
 
-  constructor() {
-    super('hesabu')
+  constructor(name: string) {
+    super(name)
     this.version(1).stores({
-      products: '++id, name',
-      sales: '++id, createdAt'
+      products: 'id, name, dirty',
+      sales: 'id, createdAt, method, dirty',
+      payments: 'id, customerKey, createdAt, dirty',
+      customers: 'key, dirty',
+      expenses: 'id, createdAt, category, dirty',
+      closings: 'day, dirty',
+      deletions: 'id',
+      meta: 'key'
     })
-    this.version(2).stores({
-      products: '++id, name',
-      sales: '++id, createdAt, method',
-      payments: '++id, customerKey, createdAt',
-      customers: 'key'
-    })
-    this.version(3).stores({
-      products: '++id, name',
-      sales: '++id, createdAt, method',
-      payments: '++id, customerKey, createdAt',
-      customers: 'key',
-      expenses: '++id, createdAt',
-      closings: 'day'
-    })
-    this.version(4)
-      .stores({
-        products: '++id, name',
-        sales: '++id, createdAt, method',
-        payments: '++id, customerKey, createdAt',
-        customers: 'key',
-        expenses: '++id, createdAt, category',
-        closings: 'day',
-        users: '++id, phone'
-      })
-      .upgrade((tx) =>
-        tx
-          .table('expenses')
-          .toCollection()
-          .modify((e: Expense) => {
-            const n = (e.note ?? '').trim().toLowerCase()
-            const hit = CATEGORIES.find((c) => c.toLowerCase() === n || (c === STOCK_CATEGORY && n === 'stock'))
-            e.category = hit ?? 'Other'
-          })
-      )
   }
 }
 
-export const db = new HesabuDB()
+/** Each shop has its own database on the device, so someone who belongs to two shops never mixes them up. */
+export let db: HesabuDB = new HesabuDB('hesabu-none')
+export function openShopDb(shopId: string): HesabuDB {
+  if (db.name !== `hesabu-${shopId}`) {
+    db.close()
+    db = new HesabuDB(`hesabu-${shopId}`)
+  }
+  return db
+}
 
-/** Who is using the app right now. Set after sign-in so records say who made them. */
-let actor: { id: number; name: string } | null = null
-export const setActor = (a: { id: number; name: string } | null): void => {
+export const newId = (): string => crypto.randomUUID()
+
+/** Who is using the app right now, so records say who made them. */
+let actor: { id: string; name: string } | null = null
+export const setActor = (a: { id: string; name: string } | null): void => {
   actor = a
 }
 const who = () => (actor ? { by: actor.id, byName: actor.name } : {})
 
+/** Tells the sync engine something changed here. */
+export const changed = (): void => {
+  window.dispatchEvent(new Event('hesabu-local-change'))
+}
+const touch = <T extends Synced>(row: T): T => ({ ...row, dirty: 1, rev: (row.rev ?? 0) + 1 })
+
 /** Save a sale and take the items out of stock, all or nothing. */
 export async function recordSale(
-  lines: SaleLine[],
+  lines: Omit<SaleLine, 'id'>[],
   method: Method,
   customer?: string
-): Promise<{ id: number; total: number }> {
+): Promise<{ id: string; total: number }> {
   const total = lines.reduce((sum, l) => sum + l.price * l.qty, 0)
-  return db.transaction('rw', db.products, db.sales, async () => {
-    const id = await db.sales.add({
-      createdAt: Date.now(),
-      method,
-      customer,
-      total,
-      lines,
-      ...who()
-    } as Sale)
+  const id = newId()
+  await db.transaction('rw', db.products, db.sales, async () => {
+    await db.sales.add(
+      touch({
+        id,
+        createdAt: Date.now(),
+        method,
+        customer,
+        total,
+        lines: lines.map((l) => ({ ...l, id: newId() })),
+        ...who()
+      } as Sale)
+    )
     for (const l of lines) {
       const p = await db.products.get(l.productId)
+      // Stock changes from sales are kept by the server too, so the product row is not marked as changed.
       if (p && !l.service) await db.products.update(l.productId, { stock: p.stock - l.qty })
     }
-    return { id, total }
   })
+  changed()
+  return { id, total }
 }
 
 /** Cancel a sale and put the items back in stock. */
-export async function voidSale(id: number): Promise<void> {
+export async function voidSale(id: string): Promise<void> {
   await db.transaction('rw', db.products, db.sales, async () => {
     const sale = await db.sales.get(id)
     if (!sale || sale.voidedAt) return
-    await db.sales.update(id, { voidedAt: Date.now() })
+    await db.sales.put(touch({ ...sale, voidedAt: Date.now() }))
     for (const l of sale.lines) {
       const p = await db.products.get(l.productId)
       if (p && !l.service) await db.products.update(l.productId, { stock: p.stock + l.qty })
     }
   })
+  changed()
 }
 
 /** One customer = one lowercase, single-spaced name, so "Wanjiku " and "wanjiku" are the same person. */
 export const customerKey = (name: string): string => name.trim().toLowerCase().replace(/\s+/g, ' ')
 
-export async function addPayment(customer: string, amount: number, method: 'cash' | 'mpesa'): Promise<number> {
-  return db.payments.add({
-    customerKey: customerKey(customer),
-    customer,
-    amount,
-    method,
-    createdAt: Date.now(),
-    ...who()
-  } as Payment)
+export async function addPayment(customer: string, amount: number, method: 'cash' | 'mpesa'): Promise<string> {
+  const id = newId()
+  await db.payments.add(
+    touch({ id, customerKey: customerKey(customer), customer, amount, method, createdAt: Date.now(), ...who() } as Payment)
+  )
+  changed()
+  return id
 }
 
-export async function deletePayment(id: number): Promise<void> {
-  await db.payments.delete(id)
+export async function deletePayment(id: string): Promise<void> {
+  await db.transaction('rw', db.payments, db.deletions, async () => {
+    await db.payments.delete(id)
+    await db.deletions.put({ id: `payments:${id}`, table: 'payments', rowId: id })
+  })
+  changed()
 }
 
 export async function savePhone(key: string, name: string, phone: string): Promise<void> {
-  await db.customers.put({ key, name, phone })
+  const cur = await db.customers.get(key)
+  await db.customers.put(touch({ ...(cur ?? { key, name }), key, name: cur?.name ?? name, phone }))
+  changed()
 }
 
-export type ProductInput = Omit<Product, 'id' | 'createdAt'>
+export type ProductInput = Omit<Product, 'id' | 'createdAt' | 'dirty' | 'rev'>
 
-export async function saveProduct(input: ProductInput, id?: number): Promise<void> {
-  if (id) await db.products.update(id, input)
-  else await db.products.add({ ...input, createdAt: Date.now() } as Product)
+export async function saveProduct(input: ProductInput, id?: string): Promise<void> {
+  if (id) {
+    const cur = await db.products.get(id)
+    if (cur) await db.products.put(touch({ ...cur, ...input }))
+  } else {
+    await db.products.add(touch({ ...input, id: newId(), createdAt: Date.now() } as Product))
+  }
+  changed()
 }
 
-export async function removeProduct(id: number): Promise<void> {
-  await db.products.delete(id)
+export async function removeProduct(id: string): Promise<void> {
+  await db.transaction('rw', db.products, db.deletions, async () => {
+    await db.products.delete(id)
+    await db.deletions.put({ id: `products:${id}`, table: 'products', rowId: id })
+  })
+  changed()
 }
 
 export interface ExpenseInput {
@@ -241,30 +262,36 @@ export interface ExpenseInput {
 }
 
 /** Save an expense. If it bought new stock, the stock goes up and each product's buying price is updated. */
-export async function addExpense(input: ExpenseInput): Promise<number> {
+export async function addExpense(input: ExpenseInput): Promise<string> {
   const items = input.category === STOCK_CATEGORY ? (input.items ?? []).filter((i) => i.qty > 0) : []
-  return db.transaction('rw', db.expenses, db.products, async () => {
-    const id = await db.expenses.add({
-      amount: input.amount,
-      note: input.note,
-      category: input.category,
-      method: input.method,
-      createdAt: Date.now(),
-      ...(items.length ? { items } : {}),
-      ...who()
-    } as Expense)
+  const id = newId()
+  await db.transaction('rw', db.expenses, db.products, async () => {
+    await db.expenses.add(
+      touch({
+        id,
+        amount: input.amount,
+        note: input.note,
+        category: input.category,
+        method: input.method,
+        createdAt: Date.now(),
+        ...(items.length ? { items } : {}),
+        ...who()
+      } as Expense)
+    )
     for (const i of items) {
       const p = await db.products.get(i.productId)
       if (!p || isService(p)) continue
+      // The server applies the same change when it receives the expense, so the product is not marked as changed.
       await db.products.update(i.productId, { stock: p.stock + i.qty, ...(i.cost > 0 ? { cost: i.cost } : {}) })
     }
-    return id
   })
+  changed()
+  return id
 }
 
 /** Remove an expense. If it had bought stock, that stock comes back off the shelf. */
-export async function deleteExpense(id: number): Promise<void> {
-  await db.transaction('rw', db.expenses, db.products, async () => {
+export async function deleteExpense(id: string): Promise<void> {
+  await db.transaction('rw', db.expenses, db.products, db.deletions, async () => {
     const e = await db.expenses.get(id)
     if (!e) return
     for (const i of e.items ?? []) {
@@ -272,7 +299,9 @@ export async function deleteExpense(id: number): Promise<void> {
       if (p) await db.products.update(i.productId, { stock: p.stock - i.qty })
     }
     await db.expenses.delete(id)
+    await db.deletions.put({ id: `expenses:${id}`, table: 'expenses', rowId: id })
   })
+  changed()
 }
 
 // ---------- Bulk product upload ----------
@@ -305,16 +334,20 @@ export async function importProducts(rows: ProductRow[], updateExisting: boolean
           skipped++
           continue
         }
-        await db.products.update(found.id, {
-          price: r.price,
-          kind: r.service ? 'service' : 'goods',
-          ...(r.hasCost ? { cost: r.cost } : {}),
-          ...(r.hasStock ? { stock: r.stock } : {}),
-          ...(r.hasLow ? { lowAt: r.lowAt } : {})
-        })
+        await db.products.put(
+          touch({
+            ...found,
+            price: r.price,
+            kind: r.service ? 'service' : 'goods',
+            ...(r.hasCost ? { cost: r.cost } : {}),
+            ...(r.hasStock ? { stock: r.stock } : {}),
+            ...(r.hasLow ? { lowAt: r.lowAt } : {})
+          })
+        )
         updated++
       } else {
-        const id = (await db.products.add({
+        const p = touch({
+          id: newId(),
           name: r.name,
           price: r.price,
           cost: r.cost,
@@ -322,80 +355,19 @@ export async function importProducts(rows: ProductRow[], updateExisting: boolean
           lowAt: r.hasLow ? r.lowAt : 5,
           ...(r.service ? { kind: 'service' as const } : {}),
           createdAt: Date.now()
-        } as Product)) as number
-        existing.set(productKey(r.name), { id } as Product)
+        } as Product)
+        await db.products.add(p)
+        existing.set(productKey(r.name), p)
         added++
       }
     }
   })
+  changed()
   return { added, updated, skipped }
 }
 
-// ---------- Team ----------
-
-export const saveUser = async (u: Omit<User, 'id'>): Promise<number> => (await db.users.add(u as User)) as number
-export const updateUser = async (id: number, patch: Partial<User>): Promise<void> => {
-  await db.users.update(id, patch)
-}
-
-export async function saveClosing(c: Closing): Promise<void> {
-  await db.closings.put(c)
-}
-
-// ---------- Backup and restore ----------
-
-export interface Backup {
-  app: 'hesabu'
-  version: number
-  exportedAt: number
-  shop: string
-  owner: string
-  products: Product[]
-  sales: Sale[]
-  payments: Payment[]
-  customers: Customer[]
-  expenses: Expense[]
-  closings: Closing[]
-  users?: User[]
-}
-
-export async function exportAll(shop: string, owner: string): Promise<Backup> {
-  const [products, sales, payments, customers, expenses, closings, users] = await Promise.all([
-    db.products.toArray(),
-    db.sales.toArray(),
-    db.payments.toArray(),
-    db.customers.toArray(),
-    db.expenses.toArray(),
-    db.closings.toArray(),
-    db.users.toArray()
-  ])
-  return { app: 'hesabu', version: 4, exportedAt: Date.now(), shop, owner, products, sales, payments, customers, expenses, closings, users }
-}
-
-const list = (x: unknown): unknown[] => (Array.isArray(x) ? x : [])
-
-/** Replace everything on this device with the contents of a backup file. Throws if the file isn't a Hesabu backup. */
-export async function importAll(data: unknown): Promise<Backup> {
-  const d = data as Partial<Backup> | null
-  if (!d || typeof d !== 'object' || d.app !== 'hesabu' || !Array.isArray(d.products) || !Array.isArray(d.sales)) {
-    throw new Error('This file is not a Hesabu backup.')
-  }
-  const okProducts = d.products.every((p) => p && typeof p.id === 'number' && typeof p.name === 'string' && typeof p.price === 'number')
-  const okSales = d.sales.every((s) => s && typeof s.id === 'number' && typeof s.createdAt === 'number' && Array.isArray(s.lines))
-  if (!okProducts || !okSales) throw new Error('This backup file looks damaged, so nothing was changed.')
-
-  await db.transaction('rw', [db.products, db.sales, db.payments, db.customers, db.expenses, db.closings, db.users], async () => {
-    await Promise.all([db.products.clear(), db.sales.clear(), db.payments.clear(), db.customers.clear(), db.expenses.clear(), db.closings.clear()])
-    if (Array.isArray(d.users)) await db.users.clear()
-    await db.products.bulkPut(d.products as Product[])
-    await db.sales.bulkPut(d.sales as Sale[])
-    await db.payments.bulkPut(list(d.payments) as Payment[])
-    await db.customers.bulkPut(list(d.customers) as Customer[])
-    await db.expenses.bulkPut(
-      (list(d.expenses) as Expense[]).map((e) => ({ ...e, category: e.category ?? 'Other' }))
-    )
-    if (Array.isArray(d.users)) await db.users.bulkPut(d.users as User[])
-    await db.closings.bulkPut(list(d.closings) as Closing[])
-  })
-  return d as Backup
+export async function saveClosing(c: Omit<Closing, 'dirty' | 'rev'>): Promise<void> {
+  const cur = await db.closings.get(c.day)
+  await db.closings.put(touch({ ...(cur ?? {}), ...c } as Closing))
+  changed()
 }

@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { HashRouter, Navigate, NavLink, Route, Routes } from 'react-router-dom'
-import { useShop, getOwnerPhone } from './shop'
-import { Welcome } from './Welcome'
 import { Sell } from './Sell'
 import { Stock } from './Stock'
 import { Credit } from './Credit'
@@ -9,7 +7,7 @@ import { Expenses } from './Expenses'
 import { Reports } from './Reports'
 import { Admin } from './Admin'
 import { AuthProvider, useAuth } from './Auth'
-import { ForcePin, SignIn, ChangePinSheet } from './SignIn'
+import { ChangePinSheet } from './SignIn'
 import { Ribbon, MenuSheet, type Panel } from './Ribbon'
 import { TeamSheet } from './Team'
 import { DataSheet } from './DataSheet'
@@ -18,11 +16,8 @@ import { UiContext } from './Ui'
 import { CreditIcon, ExpensesIcon, Logo, ReportsIcon, SellIcon, StockIcon } from './Icons'
 import { TallyDraw } from './Tally'
 import { ToastContext, type ToastData } from './Toast'
-import { heartbeat } from './cloud'
 
 export default function App() {
-  const [shop, setShop] = useShop()
-
   // The admin page is for the Hesabu owner, on any device: it skips the shop's own sign-in.
   if (window.location.hash.startsWith('#/admin')) {
     return (
@@ -35,18 +30,9 @@ export default function App() {
     )
   }
 
-  if (!shop) return <Welcome onDone={setShop} />
-
   return (
-    <AuthProvider
-      gate={(a) => {
-        if (!a.teamOn) return null
-        if (a.me.id === 0) return <SignIn />
-        const u = a.users.find((x) => x.id === a.me.id)
-        return u?.mustChange ? <ForcePin /> : null
-      }}
-    >
-      <Shell shop={shop} setShop={setShop} />
+    <AuthProvider>
+      <Shell />
     </AuthProvider>
   )
 }
@@ -60,8 +46,8 @@ function Deny({ title }: { title: string }) {
   )
 }
 
-function Shell({ shop, setShop }: { shop: string; setShop: (n: string) => void }) {
-  const { can } = useAuth()
+function Shell() {
+  const { can, shopName: shop } = useAuth()
   const [toast, setToast] = useState<ToastData | null>(null)
   const [panel, setPanel] = useState<Panel>(null)
   const [needNumber, setNeedNumber] = useState(false)
@@ -84,10 +70,6 @@ function Shell({ shop, setShop }: { shop: string; setShop: (n: string) => void }
     const t = setTimeout(() => setToast(null), 6000)
     return () => clearTimeout(t)
   }, [toast])
-
-  useEffect(() => {
-    void heartbeat(shop, getOwnerPhone())
-  }, [shop])
 
   const guard = (ok: boolean, title: string, el: ReactNode) => (ok ? el : <Deny title={title} />)
   const close = () => setPanel(null)
@@ -170,15 +152,7 @@ function Shell({ shop, setShop }: { shop: string; setShop: (n: string) => void }
           {panel === 'team' && <TeamSheet onClose={close} />}
           {panel === 'pin' && <ChangePinSheet onClose={close} />}
           {panel === 'settings' && (
-            <SettingsSheet
-              shop={shop}
-              onRename={(n) => {
-                setShop(n)
-                void heartbeat(n, getOwnerPhone(), true)
-              }}
-              onClose={close}
-              needNumber={needNumber}
-            />
+            <SettingsSheet onClose={close} needNumber={needNumber} />
           )}
         </HashRouter>
       </UiContext.Provider>

@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { seedStarter, type StarterKind } from './seed'
-import { toWaNumber } from './format'
+import { toWaNumber, showPhone } from './format'
 import { setOwnerPhone } from './shop'
-import { cloudOn } from './cloud'
+import { api } from './api'
+import { ApiError } from './cloudApi'
+import { openShopDb } from './db'
 
 const CHOICES: { kind: StarterKind; title: string; hint: string }[] = [
   { kind: 'grocery', title: 'Groceries and household', hint: 'Flour, sugar, oil, soap and similar' },
@@ -12,21 +14,32 @@ const CHOICES: { kind: StarterKind; title: string; hint: string }[] = [
   { kind: 'none', title: 'I’ll add my own', hint: 'Start with an empty list' }
 ]
 
-export function Welcome({ onDone }: { onDone: (shop: string) => void }) {
+/** Second step of making an account: name the shop and pick a starter list. */
+export function CreateShop({ phone: login, onDone, onSignOut }: { phone: string; onDone: (shopId: string) => void; onSignOut: () => void }) {
   const [shop, setShop] = useState('')
+  const [me, setMe] = useState('')
   const [kind, setKind] = useState<StarterKind>('grocery')
-  const [phone, setPhone] = useState('')
+  const [phone, setPhone] = useState(showPhone(login))
   const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
   const wa = toWaNumber(phone)
   const phoneBad = phone.trim().length > 0 && !wa
-  const ok = shop.trim().length >= 2 && !phoneBad
+  const ok = shop.trim().length >= 2 && me.trim().length >= 2 && !phoneBad
 
   const go = async () => {
     if (!ok || busy) return
     setBusy(true)
-    await seedStarter(kind)
-    if (wa) setOwnerPhone(wa)
-    onDone(shop.trim())
+    setErr('')
+    try {
+      const id = await api.createShop(shop.trim(), me.trim(), wa ?? '')
+      openShopDb(id)
+      await seedStarter(kind)
+      if (wa) setOwnerPhone(wa)
+      onDone(id)
+    } catch (e) {
+      setErr(e instanceof ApiError && e.code === 'network' ? 'No internet. Connect and try again.' : 'Could not make your shop. Try again.')
+      setBusy(false)
+    }
   }
 
   return (
@@ -34,6 +47,11 @@ export function Welcome({ onDone }: { onDone: (shop: string) => void }) {
       <img src="icon.svg" alt="" width="64" height="64" className="welcome-mark" />
       <h1 className="welcome-title">Hesabu</h1>
       <p className="welcome-sub">Know what’s happening in your shop, even when you’re not there.</p>
+
+      <label className="field">
+        <span>Your name</span>
+        <input type="text" value={me} onChange={(e) => setMe(e.target.value)} placeholder="e.g. Njeri" autoComplete="name" />
+      </label>
 
       <label className="field">
         <span>Your shop’s name</span>
@@ -52,7 +70,7 @@ export function Welcome({ onDone }: { onDone: (shop: string) => void }) {
         {phoneBad ? (
           <small className="hint warn-text">Enter a Kenyan number like 0712 345 678.</small>
         ) : (
-          <small className="hint">Your end-of-day summary is sent here.{cloudOn ? ' We also use it to help you if something goes wrong.' : ''}</small>
+          <small className="hint">Your end-of-day summary is sent here.</small>
         )}
       </label>
 
@@ -75,9 +93,12 @@ export function Welcome({ onDone }: { onDone: (shop: string) => void }) {
         </div>
       </fieldset>
 
+      {err && <p className="hint warn-text" role="alert">{err}</p>}
       <button className="btn primary block" disabled={!ok || busy} onClick={go}>
         Open my shop
       </button>
+      <p className="hint center">Free for your first 30 days.</p>
+      <button className="btn plain-btn block" onClick={onSignOut}>Sign out</button>
     </main>
   )
 }

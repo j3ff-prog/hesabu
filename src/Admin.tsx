@@ -1,40 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { apiBase, cloudOn } from './cloud'
+import { api } from './api'
+import { ApiError, type AdminShop, type Session } from './cloudApi'
+import { AuthScreen } from './SignIn'
 import { compact, isoDate, money, showPhone, toWaNumber } from './format'
 import { downloadFile, toCsv } from './csv'
 import { Sheet } from './Sheet'
 import { openWhatsApp, waLink } from './summary'
-import { Logo } from './Icons'
 
-export interface ShopRow {
-  id: string
-  shop: string
-  owner: string
-  products: number
-  users: number
-  sales30: number
-  revenue30: number
-  lastSale: number | null
-  firstSeen: number
-  lastSeen: number
-  status: 'trial' | 'active' | 'suspended'
-  plan: string
-  paidUntil: number | null
-  note: string
-  message: string
-}
+type ShopRow = AdminShop
 
-const KEY = 'hesabu.adminKey'
-const read = () => {
-  try {
-    return sessionStorage.getItem(KEY) ?? ''
-  } catch {
-    return ''
-  }
-}
 const DAY = 86400000
-const ago = (ts: number | null): string => {
+const t = (iso: string | null): number | null => (iso ? new Date(iso).getTime() : null)
+const ago = (iso: string | null): string => {
+  const ts = t(iso)
   if (!ts) return 'Never'
   const d = Math.floor((Date.now() - ts) / DAY)
   return d <= 0 ? 'Today' : d === 1 ? 'Yesterday' : `${d} days ago`
@@ -42,46 +20,41 @@ const ago = (ts: number | null): string => {
 
 type Filter = 'all' | 'active7' | 'quiet' | 'trial' | 'paying' | 'suspended'
 
-/** Your view of every shop that uses Hesabu. Open it at  #/admin  and sign in with your admin key. */
+/** Your view of every shop that uses Hesabu. Open it at  #/admin  and sign in with your own phone number and PIN. */
 export function Admin() {
-  const [key, setKey] = useState(read)
-  const [typed, setTyped] = useState('')
+  const [session, setSession] = useState<Session | null | undefined>(undefined)
   const [shops, setShops] = useState<ShopRow[] | null>(null)
   const [err, setErr] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<ShopRow | null>(null)
 
-  const load = useCallback(async (k: string) => {
+  useEffect(() => {
+    api.getSession().then(setSession, () => setSession(null))
+  }, [])
+
+  const load = useCallback(async () => {
     setErr('')
     try {
-      const r = await fetch(apiBase + '/api/admin/shops', { headers: { authorization: 'Bearer ' + k } })
-      if (r.status === 401) {
-        setErr('That key is not right.')
-        setKey('')
-        try { sessionStorage.removeItem(KEY) } catch { /* ignore */ }
-        return
-      }
-      if (!r.ok) throw new Error()
-      setShops(((await r.json()) as { shops: ShopRow[] }).shops)
-    } catch {
-      setErr('Could not reach the registry. Check your internet and the API address.')
+      setShops(await api.adminShops())
+    } catch (e) {
+      setErr(e instanceof ApiError && e.code === 'network' ? 'No internet.' : 'This account is not a Hesabu admin. Ask for your number to be added in Supabase.')
     }
   }, [])
 
   useEffect(() => {
-    if (key) void load(key)
-  }, [key, load])
+    if (session) void load()
+  }, [session, load])
 
   const stats = useMemo(() => {
     const s = shops ?? []
     const now = Date.now()
     return {
       total: s.length,
-      active7: s.filter((x) => now - x.lastSeen < 7 * DAY).length,
-      newWeek: s.filter((x) => now - x.firstSeen < 7 * DAY).length,
+      active7: s.filter((x) => now - (t(x.last_sale) ?? 0) < 7 * DAY).length,
+      newWeek: s.filter((x) => now - (t(x.created_at) ?? 0) < 7 * DAY).length,
       paying: s.filter((x) => x.status === 'active').length,
-      revenue: s.reduce((t, x) => t + x.revenue30, 0)
+      revenue: s.reduce((sum, x) => sum + Number(x.revenue30), 0)
     }
   }, [shops])
 
@@ -90,46 +63,20 @@ export function Admin() {
     const n = q.trim().toLowerCase()
     return (shops ?? [])
       .filter((x) => {
-        if (filter === 'active7') return now - x.lastSeen < 7 * DAY
-        if (filter === 'quiet') return now - x.lastSeen >= 14 * DAY
+        const last = t(x.last_sale) ?? 0
+        if (filter === 'active7') return now - last < 7 * DAY
+        if (filter === 'quiet') return now - last >= 14 * DAY
         if (filter === 'trial') return x.status === 'trial'
         if (filter === 'paying') return x.status === 'active'
         if (filter === 'suspended') return x.status === 'suspended'
         return true
       })
-      .filter((x) => !n || x.shop.toLowerCase().includes(n) || x.owner.includes(n.replace(/\D/g, '') || '§'))
-      .sort((a, b) => b.lastSeen - a.lastSeen)
+      .filter((x) => !n || x.name.toLowerCase().includes(n) || x.owner_phone.includes(n.replace(/\D/g, '') || '§'))
+      .sort((a, b) => (t(b.last_sale) ?? t(b.created_at) ?? 0) - (t(a.last_sale) ?? t(a.created_at) ?? 0))
   }, [shops, filter, q])
 
-  if (!cloudOn) {
-    return (
-      <main className="page admin">
-        <h1>Admin</h1>
-        <div className="empty">
-          <p className="empty-title">The registry is not connected yet</p>
-          <p>Deploy the registry (see SETUP.md, part 3) and build the app with its address. Then every shop that opens Hesabu appears here.</p>
-          <Link className="btn primary" to="/">Back to the shop</Link>
-        </div>
-      </main>
-    )
-  }
-
-  if (!key) {
-    return (
-      <main className="welcome">
-        <Logo size={56} />
-        <h1 className="welcome-title">Admin</h1>
-        <form onSubmit={(e) => { e.preventDefault(); try { sessionStorage.setItem(KEY, typed) } catch { /* ignore */ } setKey(typed) }}>
-          <label className="field">
-            <span>Admin key</span>
-            <input type="password" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" autoFocus />
-          </label>
-          {err && <p className="hint warn-text" role="alert">{err}</p>}
-          <button className="btn primary block" type="submit" disabled={typed.length < 8}>Sign in</button>
-        </form>
-      </main>
-    )
-  }
+  if (session === undefined) return <main className="welcome" aria-busy="true" />
+  if (!session) return <AuthScreen onDone={(s) => setSession(s)} />
 
   const filters: [Filter, string][] = [['all', 'All'], ['active7', 'Used this week'], ['quiet', 'Gone quiet'], ['trial', 'On trial'], ['paying', 'Paying'], ['suspended', 'Suspended']]
 
@@ -138,22 +85,22 @@ export function Admin() {
       <div className="admin-head">
         <h1>Hesabu admin</h1>
         <div className="admin-actions">
-          <button className="btn outline" onClick={() => void load(key)}>Refresh</button>
+          <button className="btn outline" onClick={() => void load()}>Refresh</button>
           <button
             className="btn outline"
             onClick={() =>
               downloadFile(
                 `hesabu-shops-${isoDate(Date.now())}.csv`,
                 toCsv([
-                  ['Shop', 'Owner phone', 'Status', 'Plan', 'Paid until', 'First seen', 'Last seen', 'Products', 'Staff', 'Sales (30 days)', 'Revenue (30 days)', 'Note'],
-                  ...(shops ?? []).map((s) => [s.shop, s.owner ? showPhone(s.owner) : '', s.status, s.plan, s.paidUntil ? isoDate(s.paidUntil) : '', isoDate(s.firstSeen), isoDate(s.lastSeen), s.products, s.users, s.sales30, s.revenue30, s.note])
+                  ['Shop', 'Owner phone', 'Status', 'Plan', 'Trial ends', 'Paid until', 'Started', 'Last sale', 'Products', 'Staff', 'Sales (30 days)', 'Revenue (30 days)', 'Note'],
+                  ...(shops ?? []).map((s) => [s.name, s.owner_phone ? showPhone(s.owner_phone) : '', s.status, s.plan, isoDate(t(s.trial_ends_at) ?? 0), s.paid_until ? isoDate(t(s.paid_until) ?? 0) : '', isoDate(t(s.created_at) ?? 0), s.last_sale ? isoDate(t(s.last_sale) ?? 0) : '', s.products, s.staff, s.sales30, s.revenue30, s.admin_note])
                 ])
               )
             }
           >
             Download list
           </button>
-          <button className="btn plain-btn" onClick={() => { try { sessionStorage.removeItem(KEY) } catch { /* ignore */ } setKey(''); setShops(null) }}>Sign out</button>
+          <button className="btn plain-btn" onClick={async () => { await api.signOut(); window.location.hash = '#/'; window.location.reload() }}>Sign out</button>
         </div>
       </div>
       {err && <p className="hint warn-text" role="alert">{err}</p>}
@@ -185,11 +132,11 @@ export function Admin() {
                 <li key={s.id}>
                   <button className="shop-row" onClick={() => setOpen(s)}>
                     <span className="shop-main">
-                      <span className="row-name">{s.shop}</span>
-                      <span className="muted">{s.owner ? showPhone(s.owner) : 'No phone yet'} · seen {ago(s.lastSeen)}</span>
+                      <span className="row-name">{s.name}</span>
+                      <span className="muted">{s.owner_phone ? showPhone(s.owner_phone) : 'No phone yet'} · last sale {ago(s.last_sale)}</span>
                     </span>
                     <span className="shop-figs">
-                      <span className="strong">KES {compact(s.revenue30)}</span>
+                      <span className="strong">KES {compact(Number(s.revenue30))}</span>
                       <span className="muted">{s.sales30} sales · {s.products} products</span>
                     </span>
                     <span className={'status ' + s.status}>{s.status === 'active' ? 'Paying' : s.status === 'trial' ? 'Trial' : 'Suspended'}</span>
@@ -204,7 +151,6 @@ export function Admin() {
       {open && (
         <ShopSheet
           shop={open}
-          adminKey={key}
           onClose={() => setOpen(null)}
           onSaved={(r) => {
             setShops((cur) => (cur ?? []).map((x) => (x.id === r.id ? r : x)))
@@ -216,28 +162,23 @@ export function Admin() {
   )
 }
 
-function ShopSheet({ shop, adminKey, onClose, onSaved }: { shop: ShopRow; adminKey: string; onClose: () => void; onSaved: (s: ShopRow) => void }) {
+function ShopSheet({ shop, onClose, onSaved }: { shop: ShopRow; onClose: () => void; onSaved: (s: ShopRow) => void }) {
   const [status, setStatus] = useState(shop.status)
   const [plan, setPlan] = useState(shop.plan)
-  const [paid, setPaid] = useState(shop.paidUntil ? isoDate(shop.paidUntil) : '')
-  const [note, setNote] = useState(shop.note)
+  const [paid, setPaid] = useState(shop.paid_until ? isoDate(t(shop.paid_until) ?? 0) : '')
+  const [note, setNote] = useState(shop.admin_note)
   const [message, setMessage] = useState(shop.message)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
-  const wa = toWaNumber(shop.owner)
+  const wa = toWaNumber(shop.owner_phone)
 
   const save = async () => {
     setBusy(true)
     setErr('')
     try {
-      const paidUntil = paid ? new Date(paid + 'T23:59:59').getTime() : null
-      const r = await fetch(apiBase + '/api/admin/shop', {
-        method: 'POST',
-        headers: { authorization: 'Bearer ' + adminKey, 'content-type': 'application/json' },
-        body: JSON.stringify({ id: shop.id, status, plan, paidUntil, note, message })
-      })
-      if (!r.ok) throw new Error()
-      onSaved({ ...shop, status, plan, paidUntil, note, message })
+      const paidUntil = paid ? new Date(paid + 'T23:59:59').toISOString() : null
+      await api.adminSetShop(shop.id, status, plan, paidUntil, note, message)
+      onSaved({ ...shop, status, plan, paid_until: paidUntil, admin_note: note, message })
     } catch {
       setErr('Could not save. Try again.')
       setBusy(false)
@@ -245,19 +186,18 @@ function ShopSheet({ shop, adminKey, onClose, onSaved }: { shop: ShopRow; adminK
   }
 
   return (
-    <Sheet title={shop.shop} onClose={onClose}>
+    <Sheet title={shop.name} onClose={onClose}>
       <dl className="facts">
-        <div><dt>Owner</dt><dd>{shop.owner ? showPhone(shop.owner) : 'Not given'}</dd></div>
-        <div><dt>Started</dt><dd>{isoDate(shop.firstSeen)}</dd></div>
-        <div><dt>Last opened</dt><dd>{ago(shop.lastSeen)}</dd></div>
-        <div><dt>Last sale</dt><dd>{ago(shop.lastSale)}</dd></div>
-        <div><dt>Sales, 30 days</dt><dd>{shop.sales30} (KES {money(shop.revenue30)})</dd></div>
-        <div><dt>Products · Staff</dt><dd>{shop.products} · {shop.users}</dd></div>
+        <div><dt>Owner</dt><dd>{shop.owner_phone ? showPhone(shop.owner_phone) : 'Not given'}</dd></div>
+        <div><dt>Started</dt><dd>{isoDate(t(shop.created_at) ?? 0)}</dd></div>
+        <div><dt>Trial ends</dt><dd>{isoDate(t(shop.trial_ends_at) ?? 0)}</dd></div>
+        <div><dt>Last sale</dt><dd>{ago(shop.last_sale)}</dd></div>
+        <div><dt>Sales, 30 days</dt><dd>{shop.sales30} (KES {money(Number(shop.revenue30))})</dd></div>
+        <div><dt>Products · Staff</dt><dd>{shop.products} · {shop.staff}</dd></div>
       </dl>
-      <p className="hint">You see totals only. Individual sales, customers and prices stay on the shop’s phone.</p>
 
       {wa && (
-        <button className="btn outline block" onClick={() => openWhatsApp(waLink(wa, `Hello, this is Hesabu. How is ${shop.shop} getting on with the app?`))}>
+        <button className="btn outline block" onClick={() => openWhatsApp(waLink(wa, `Hello, this is Hesabu. How is ${shop.name} getting on with the app?`))}>
           Message on WhatsApp
         </button>
       )}
@@ -271,7 +211,9 @@ function ShopSheet({ shop, adminKey, onClose, onSaved }: { shop: ShopRow; adminK
             </button>
           ))}
         </div>
-        {status === 'suspended' && <p className="hint spaced">The shop can still look at its records and download its data, but cannot record new sales.</p>}
+        <p className="hint spaced">
+          {status === 'suspended' ? 'The shop can still look at its records and download its data, but cannot record new sales.' : status === 'active' ? 'Paying shops can record until the "paid until" date.' : 'Trial shops can record until their trial ends.'}
+        </p>
       </fieldset>
       <div className="two">
         <label className="field"><span>Plan</span><input type="text" value={plan} onChange={(e) => setPlan(e.target.value)} placeholder="e.g. Monthly 500" /></label>

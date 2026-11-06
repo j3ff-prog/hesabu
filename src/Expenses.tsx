@@ -20,7 +20,7 @@ export function Expenses() {
   const toast = useToast()
   const [range, setRange] = useState<RangeId>('today')
   const [adding, setAdding] = useState(false)
-  const [open, setOpen] = useState<number | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
   const all = useLiveQuery(() => db.expenses.orderBy('createdAt').reverse().toArray(), [])
 
   const from = range === 'today' ? startOfDay() : range === 'week' ? addDays(startOfDay(), -6) : range === 'month' ? addDays(startOfDay(), -29) : 0

@@ -5,7 +5,7 @@ import { methodLabel } from './format'
 
 export interface CreditEntry {
   kind: 'sale' | 'payment'
-  id: number
+  id: string
   at: number
   amount: number
   label: string

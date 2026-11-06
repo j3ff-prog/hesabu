@@ -9,7 +9,7 @@ import { useToast } from './Toast'
 import { useDebtors } from './creditLogic'
 import { useAuth } from './Auth'
 
-type Cart = Record<number, number>
+type Cart = Record<string, number>
 
 export function Sell() {
   const products = useLiveQuery(() => db.products.orderBy('name').toArray(), [])
@@ -19,8 +19,8 @@ export function Sell() {
   const toast = useToast()
   const { can, readOnly } = useAuth()
 
-  const add = (id: number) => setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 }))
-  const sub = (id: number) =>
+  const add = (id: string) => setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 }))
+  const sub = (id: string) =>
     setCart((c) => {
       const next = { ...c }
       if ((next[id] ?? 0) <= 1) delete next[id]
@@ -164,10 +164,10 @@ function Checkout({
 }: {
   lines: { p: Product; qty: number }[]
   total: number
-  onAdd: (id: number) => void
-  onSub: (id: number) => void
+  onAdd: (id: string) => void
+  onSub: (id: string) => void
   onClose: () => void
-  onDone: (id: number, total: number, buyer?: string, credit?: boolean) => void
+  onDone: (id: string, total: number, buyer?: string, credit?: boolean) => void
 }) {
   const [method, setMethod] = useState<Method>('cash')
   const [customer, setCustomer] = useState('')
