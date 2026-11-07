@@ -61,3 +61,7 @@ export const compact = (n: number): string => {
   if (a >= 1e3) return (n / 1e3).toFixed(a >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'k'
   return String(Math.round(n))
 }
+
+/** Where customers go for help. */
+export const SUPPORT_EMAIL = 'nexus.softwareske@gmail.com'
+export const supportLink = (subject = 'Hesabu help'): string => `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`

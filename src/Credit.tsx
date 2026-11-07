@@ -40,7 +40,11 @@ export function Credit({ shop }: { shop: string }) {
                   <button className="row" onClick={() => setOpenKey(d.key)}>
                     <span className="row-main">
                       <span className="row-name">{d.name}</span>
-                      {days >= 14 ? (
+                      {d.due && d.due < Date.now() ? (
+                        <span className="overdue">Overdue by {Math.max(1, daysSince(d.due))} {Math.max(1, daysSince(d.due)) === 1 ? 'day' : 'days'} · was due {shortDate(d.due)}</span>
+                      ) : d.due ? (
+                        <span className="muted">Due {shortDate(d.due)}</span>
+                      ) : days >= 14 ? (
                         <span className="overdue">Unpaid for {days} days</span>
                       ) : (
                         <span className="muted">Since {shortDate(d.since)}</span>

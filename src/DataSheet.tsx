@@ -3,9 +3,8 @@ import { db, importProducts, productKey, type ProductRow } from './db'
 import { buildDebtors } from './creditLogic'
 import { downloadFile, parseCsv, readProducts, TEMPLATE, toCsv, type ImportPreview } from './csv'
 import { addDays, daysSince, isoDate, isoTime, showPhone, startOfDay } from './format'
-import { methodLabel } from './format'
+import { payLabel, partsOf } from './pay'
 import { useAuth } from './Auth'
-import { useShop } from './shop'
 import { Sheet } from './Sheet'
 
 const PERIODS = [
@@ -13,7 +12,8 @@ const PERIODS = [
   { id: '7', label: 'Last 7 days' },
   { id: '30', label: 'Last 30 days' },
   { id: 'month', label: 'This month' },
-  { id: 'all', label: 'All time' }
+  { id: 'all', label: 'All time' },
+  { id: 'custom', label: 'Pick dates' }
 ] as const
 type PeriodId = (typeof PERIODS)[number]['id']
 
@@ -33,26 +33,36 @@ const stamp = () => isoDate(Date.now())
 
 /** Download sales, stock, credit and expenses as spreadsheets, and add many products at once from a CSV file. */
 export function DataSheet({ onClose }: { onClose: () => void }) {
-  const { can } = useAuth()
-  const [shop] = useShop()
+  const { can, shopName: shop } = useAuth()
+  const [fromD, setFromD] = useState(() => isoDate(addDays(startOfDay(), -29)))
+  const [toD, setToD] = useState(() => isoDate(startOfDay()))
   const [period, setPeriod] = useState<PeriodId>('30')
   const [msg, setMsg] = useState('')
   const slug = shop.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'shop'
   const cost = can('seeCost')
 
+  const range = (): [number, number] => {
+    if (period === 'custom') {
+      const a = new Date(fromD + 'T00:00:00').getTime()
+      const b = new Date(toD + 'T00:00:00').getTime()
+      return [Math.min(a, b), addDays(Math.max(a, b), 1)]
+    }
+    return [fromOf(period), addDays(startOfDay(), 1)]
+  }
+
   const done = (what: string, n: number) => setMsg(n === 0 ? `Nothing to download for ${what} yet.` : `Downloaded ${n} ${n === 1 ? 'row' : 'rows'} of ${what}.`)
 
   const sales = async () => {
-    const from = fromOf(period)
-    const list = (await db.sales.where('createdAt').aboveOrEqual(from).toArray()).sort((a, b) => a.createdAt - b.createdAt)
-    const head = ['Date', 'Time', 'Sale no.', 'Product', 'Quantity', 'Price each', 'Line total', ...(cost ? ['Buying price each', 'Profit'] : []), 'Payment', 'Buyer', 'Sold by', 'Status']
+    const [from, to] = range()
+    const list = (await db.sales.where('createdAt').between(from, to, true, false).toArray()).sort((a, b) => a.createdAt - b.createdAt)
+    const head = ['Date', 'Time', 'Sale no.', 'Product', 'Quantity', 'Price each', 'Line total', ...(cost ? ['Buying price each', 'Profit'] : []), 'Payment', 'Cash part', 'M-Pesa part', 'Credit part', 'Due date', 'Buyer', 'Sold by', 'Status']
     const rows: (string | number)[][] = [head]
     for (const s of list)
       for (const l of s.lines)
         rows.push([
           isoDate(s.createdAt), isoTime(s.createdAt), s.id, l.name, l.qty, l.price, l.price * l.qty,
           ...(cost ? [l.cost > 0 ? l.cost : '', l.cost > 0 ? (l.price - l.cost) * l.qty : ''] : []),
-          methodLabel[s.method], s.customer ?? '', s.byName ?? '', s.voidedAt ? 'Cancelled' : 'Active'
+          payLabel(s), partsOf(s).cash, partsOf(s).mpesa, partsOf(s).credit, s.dueAt ? isoDate(s.dueAt) : '', s.customer ?? '', s.byName ?? '', s.voidedAt ? 'Cancelled' : 'Active'
         ])
     if (rows.length > 1) downloadFile(`${slug}-sales-${stamp()}.csv`, toCsv(rows))
     done('sales', rows.length - 1)
@@ -70,17 +80,17 @@ export function DataSheet({ onClose }: { onClose: () => void }) {
   }
 
   const credit = async () => {
-    const [s, p, c] = await Promise.all([db.sales.where('method').equals('credit').toArray(), db.payments.toArray(), db.customers.toArray()])
+    const [s, p, c] = await Promise.all([db.sales.toArray(), db.payments.toArray(), db.customers.toArray()])
     const list = buildDebtors(s, p, c)
-    const rows: (string | number)[][] = [['Customer', 'Phone', 'Owes (KES)', 'Unpaid since', 'Days']]
-    for (const d of list) rows.push([d.name, d.phone ? showPhone(d.phone) : '', d.balance, isoDate(d.since), daysSince(d.since)])
+    const rows: (string | number)[][] = [['Customer', 'Phone', 'Owes (KES)', 'Unpaid since', 'Days', 'Due date']]
+    for (const d of list) rows.push([d.name, d.phone ? showPhone(d.phone) : '', d.balance, isoDate(d.since), daysSince(d.since), d.due ? isoDate(d.due) : ''])
     if (rows.length > 1) downloadFile(`${slug}-credit-owed-${stamp()}.csv`, toCsv(rows))
     done('people who owe you', rows.length - 1)
   }
 
   const payments = async () => {
-    const from = fromOf(period)
-    const list = (await db.payments.where('createdAt').aboveOrEqual(from).toArray()).sort((a, b) => a.createdAt - b.createdAt)
+    const [from, to] = range()
+    const list = (await db.payments.where('createdAt').between(from, to, true, false).toArray()).sort((a, b) => a.createdAt - b.createdAt)
     const rows: (string | number)[][] = [['Date', 'Time', 'Customer', 'Amount', 'Paid with', 'Recorded by']]
     for (const p of list) rows.push([isoDate(p.createdAt), isoTime(p.createdAt), p.customer, p.amount, p.method === 'cash' ? 'Cash' : 'M-Pesa', p.byName ?? ''])
     if (rows.length > 1) downloadFile(`${slug}-credit-payments-${stamp()}.csv`, toCsv(rows))
@@ -88,8 +98,8 @@ export function DataSheet({ onClose }: { onClose: () => void }) {
   }
 
   const expenses = async () => {
-    const from = fromOf(period)
-    const list = (await db.expenses.where('createdAt').aboveOrEqual(from).toArray()).sort((a, b) => a.createdAt - b.createdAt)
+    const [from, to] = range()
+    const list = (await db.expenses.where('createdAt').between(from, to, true, false).toArray()).sort((a, b) => a.createdAt - b.createdAt)
     const rows: (string | number)[][] = [['Date', 'Time', 'Category', 'Note', 'Amount', 'Paid with', 'Products added to stock', 'Recorded by']]
     for (const e of list)
       rows.push([isoDate(e.createdAt), isoTime(e.createdAt), e.category, e.note, e.amount, e.method === 'cash' ? 'Cash' : 'M-Pesa', (e.items ?? []).map((i) => `${i.qty} x ${i.name}`).join('; '), e.byName ?? ''])
@@ -108,6 +118,12 @@ export function DataSheet({ onClose }: { onClose: () => void }) {
               <button key={p.id} role="radio" aria-checked={period === p.id} className={'chip' + (period === p.id ? ' on' : '')} onClick={() => setPeriod(p.id)}>{p.label}</button>
             ))}
           </div>
+          {period === 'custom' && (
+            <div className="two">
+              <label className="field"><span>From</span><input type="date" value={fromD} max={toD} onChange={(e) => setFromD(e.target.value)} /></label>
+              <label className="field"><span>To</span><input type="date" value={toD} min={fromD} max={isoDate(startOfDay())} onChange={(e) => setToD(e.target.value)} /></label>
+            </div>
+          )}
           <div className="dl-list">
             <button className="btn outline block" onClick={sales}>Sales</button>
             <button className="btn outline block" onClick={stock}>Items and stock</button>

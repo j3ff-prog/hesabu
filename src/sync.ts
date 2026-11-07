@@ -106,7 +106,8 @@ async function push(api: Api, shopId: string, role: Role): Promise<void> {
   for (const s of await db.sales.where('dirty').equals(1).toArray()) {
     if (!s.sent) {
       await api.pushSale(
-        { id: s.id, shop_id: shopId, created_at: iso(s.createdAt), method: s.method, customer: s.customer ?? '', total: s.total, by_user: s.by, by_name: s.byName ?? '' },
+        { id: s.id, shop_id: shopId, created_at: iso(s.createdAt), method: s.method, customer: s.customer ?? '', total: s.total, by_user: s.by, by_name: s.byName ?? '',
+          cash_amt: s.cash ?? null, mpesa_amt: s.mpesa ?? null, credit_amt: s.credit ?? null, due_at: s.dueAt ? iso(s.dueAt) : null },
         s.lines.map((l) => ({ id: l.id, product_id: l.productId, name: l.name, qty: l.qty, price: l.price, service: !!l.service }))
       )
     }
@@ -285,7 +286,9 @@ async function pullAll(api: Api, shopId: string, role: Role): Promise<void> {
         }
         await db.sales.put({
           id, createdAt: ms(r.created_at), method: r.method as Sale['method'], customer: (r.customer as string | null) ?? undefined,
-          total: num(r.total), voidedAt, by: r.by_user as string, byName: r.by_name as string, dirty: 0, sent: 1,
+          total: num(r.total), voidedAt,
+          ...(r.cash_amt !== null && r.cash_amt !== undefined ? { cash: num(r.cash_amt), mpesa: num(r.mpesa_amt), credit: num(r.credit_amt) } : {}),
+          ...(r.due_at ? { dueAt: ms(r.due_at) } : {}), by: r.by_user as string, byName: r.by_name as string, dirty: 0, sent: 1,
           lines: (linesOf.get(id) ?? []).map((l) => ({
             id: l.id as string, productId: (l.product_id as string | null) ?? '', name: l.name as string, qty: num(l.qty),
             price: num(l.price), cost: costOf.get(l.id as string) ?? 0, ...(l.service ? { service: true } : {})

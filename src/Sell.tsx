@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { customerKey, db, recordSale, voidSale, type Method, type Product, isService } from './db'
-import { money, methodLabel } from './format'
+import { money, methodLabel, isoDate, addDays, startOfDay } from './format'
 import { Sheet } from './Sheet'
 import { MinusIcon, PlusIcon, SearchIcon } from './Icons'
 import { useToast } from './Toast'
@@ -170,24 +170,35 @@ function Checkout({
   onDone: (id: string, total: number, buyer?: string, credit?: boolean) => void
 }) {
   const [method, setMethod] = useState<Method>('cash')
+  const [split, setSplit] = useState(false)
+  const [cashIn, setCashIn] = useState('')
+  const [mpesaIn, setMpesaIn] = useState('')
+  const [due, setDue] = useState(() => isoDate(addDays(startOfDay(), 7)))
   const [customer, setCustomer] = useState('')
   const [saving, setSaving] = useState(false)
   const debtors = useDebtors()
   const known = useKnownBuyers()
-  const isCredit = method === 'credit'
+
+  const cashAmt = split ? Math.max(0, Number(cashIn) || 0) : method === 'cash' ? total : 0
+  const mpesaAmt = split ? Math.max(0, Number(mpesaIn) || 0) : method === 'mpesa' ? total : 0
+  const over = cashAmt + mpesaAmt > total
+  const creditAmt = over ? 0 : total - cashAmt - mpesaAmt
+  const isCredit = creditAmt > 0
   const needsName = isCredit && customer.trim().length < 2
+  const needsDue = isCredit && !due
   const empty = lines.length === 0
 
   const save = async () => {
-    if (saving || needsName || empty) return
+    if (saving || needsName || needsDue || over || empty) return
     setSaving(true)
     // Reuse the spelling we already have for this person, so "wanjiku" and "Wanjiku" stay one customer.
     const typed = customer.trim()
     const who = typed ? known.find((k) => k.key === customerKey(typed))?.name ?? typed : undefined
     const { id, total: t } = await recordSale(
       lines.map(({ p, qty }) => ({ productId: p.id, name: p.name, qty, price: p.price, cost: p.cost, ...(isService(p) ? { service: true } : {}) })),
-      method,
-      who
+      { cash: cashAmt, mpesa: mpesaAmt, credit: creditAmt },
+      who,
+      isCredit ? new Date(due + 'T23:59:59').getTime() : undefined
     )
     onDone(id, t, who, isCredit)
   }
@@ -228,12 +239,32 @@ function Checkout({
               role="radio"
               aria-checked={method === m}
               className={method === m ? 'on' : ''}
-              onClick={() => setMethod(m)}
+              onClick={() => { setMethod(m); setSplit(false) }}
             >
               {methodLabel[m]}
             </button>
           ))}
+          <button role="radio" aria-checked={split} className={split ? 'on' : ''} onClick={() => setSplit(true)}>
+            Part and part
+          </button>
         </div>
+        {split && (
+          <div className="two split-in">
+            <label className="field">
+              <span>Paid in cash</span>
+              <input type="number" inputMode="numeric" min="0" value={cashIn} onChange={(e) => setCashIn(e.target.value)} placeholder="0" />
+            </label>
+            <label className="field">
+              <span>Paid by M-Pesa</span>
+              <input type="number" inputMode="numeric" min="0" value={mpesaIn} onChange={(e) => setMpesaIn(e.target.value)} placeholder="0" />
+            </label>
+          </div>
+        )}
+        {split && (
+          <p className={'hint' + (over ? ' warn-text' : '')}>
+            {over ? `That is more than the total (KES ${money(total)}).` : creditAmt > 0 ? `The rest, KES ${money(creditAmt)}, goes on credit.` : 'Fully paid.'}
+          </p>
+        )}
       </fieldset>
 
       <label className="field">
@@ -257,15 +288,23 @@ function Checkout({
         </div>
       )}
 
+      {isCredit && (
+        <label className="field">
+          <span>When will they pay?</span>
+          <input type="date" value={due} min={isoDate(startOfDay())} onChange={(e) => setDue(e.target.value)} />
+        </label>
+      )}
+
       <div className="total-row">
         <span>Total</span>
         <span className="total-num">KES {money(total)}</span>
       </div>
 
-      <button className="btn primary block" disabled={needsName || saving || empty} onClick={save}>
+      <button className="btn primary block" disabled={needsName || needsDue || over || saving || empty} onClick={save}>
         Record sale
       </button>
       {needsName && <p className="hint center">Enter the customer’s name to record a credit sale.</p>}
+      {!needsName && needsDue && <p className="hint center">Choose the date they will pay.</p>}
     </Sheet>
   )
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { api } from './api'
 import { ApiError, type Session, type ShopInfo } from './cloudApi'
-import { showPhone, toWaNumber } from './format'
+import { showPhone, toWaNumber, SUPPORT_EMAIL } from './format'
 import { validPin } from './pin'
 import { ROLE_LABEL } from './rights'
 import { Sheet } from './Sheet'
@@ -78,7 +78,7 @@ export function AuthScreen({ onDone }: { onDone: (s: Session, shops: ShopInfo[])
       <button className="btn plain-btn block" onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setErr(''); setPin(''); setAgain('') }}>
         {mode === 'in' ? 'New here? Make an account' : 'I already have an account'}
       </button>
-      {mode === 'in' && <p className="hint center">Forgot your PIN? Ask your shop owner to set a new one. Owners can message the Hesabu team.</p>}
+      {mode === 'in' && <p className="hint center">Forgot your PIN? Staff: ask your shop owner to set a new one. Owners: email {SUPPORT_EMAIL} from the email or WhatsApp number you gave us.</p>}
     </main>
   )
 }

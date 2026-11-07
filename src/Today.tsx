@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, voidSale, type Sale } from './db'
-import { dateLabel, methodLabel, money, startOfDay, timeOf } from './format'
+import { dateLabel, money, startOfDay, timeOf } from './format'
 import { useAuth } from './Auth'
 import { useUi } from './Ui'
 import { getOwnerPhone } from './shop'
+import { payLabel } from './pay'
 import { Sheet } from './Sheet'
 import { Tally } from './Tally'
 import { CloseDaySheet } from './DayTools'
@@ -71,6 +72,18 @@ export function Today({ shop }: { shop: string }) {
         {full && f.spent > 0 && <p className="hero-collected">Spent KES {money(f.spent)}</p>}
         {full && can('seeCost') && f.hasCost && <p className="hero-profit">Estimated profit KES {money(f.profit)} after expenses</p>}
       </section>
+
+      {full && can('expenses') && (
+        <section className="onhand" aria-label="Money on hand">
+          <p className="hero-label">Money on hand today</p>
+          <p className={'onhand-num' + (f.onHand.total < 0 ? ' bad' : '')}><span>KES</span> {money(f.onHand.total)}</p>
+          <dl className="hero-split">
+            <div><dt>In cash</dt><dd className={f.onHand.cash < 0 ? 'bad' : ''}>{money(f.onHand.cash)}</dd></div>
+            <div><dt>On M-Pesa</dt><dd className={f.onHand.mpesa < 0 ? 'bad' : ''}>{money(f.onHand.mpesa)}</dd></div>
+          </dl>
+          <p className="hint">Money received today minus money spent. What customers still owe is not counted.</p>
+        </section>
+      )}
 
       {full && (
       <section className="close-card" aria-label="End of day">
@@ -150,7 +163,7 @@ export function Today({ shop }: { shop: string }) {
               <button className="sale-row" onClick={() => setOpen(s)}>
                 <span className="sale-main">
                   <span>{summary(s)}</span>
-                  <span className="muted">{timeOf(s.createdAt)} · {methodLabel[s.method]}{s.customer ? ` · ${s.customer}` : ''}{full && s.byName ? ` · ${s.byName}` : ''}</span>
+                  <span className="muted">{timeOf(s.createdAt)} · {payLabel(s)}{s.customer ? ` · ${s.customer}` : ''}{full && s.byName ? ` · ${s.byName}` : ''}</span>
                 </span>
                 <span className="strong">{money(s.total)}</span>
               </button>
@@ -199,7 +212,7 @@ function SaleSheet({ sale, onClose, canVoid }: { sale: Sale; onClose: () => void
   return (
     <Sheet title={sale.voidedAt ? 'Cancelled sale' : 'Sale'} onClose={onClose}>
       <p className="muted">
-        {timeOf(sale.createdAt)} · {methodLabel[sale.method]}
+        {timeOf(sale.createdAt)} · {payLabel(sale)}
         {sale.customer ? ` · ${sale.customer}` : ''}
         {sale.byName ? ` · Sold by ${sale.byName}` : ''}
       </p>

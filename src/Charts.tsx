@@ -185,3 +185,83 @@ export function Card({ title, sub, children }: { title: string; sub?: string; ch
     </section>
   )
 }
+
+export interface ProfitDatum {
+  label: string
+  full: string
+  value: number
+}
+
+/** Profit over time, as bars or as a line. A loss goes below the zero line and turns red. */
+export function ProfitChart({ data, mode, height = 200, label }: { data: ProfitDatum[]; mode: 'bars' | 'line'; height?: number; label: string }) {
+  const [ref, w] = useWidth<HTMLDivElement>()
+  const [sel, setSel] = useState<number | null>(null)
+  const padL = 40
+  const padB = 22
+  const padT = 8
+  const innerH = height - padB - padT
+  const vals = data.map((d) => d.value)
+  const maxV = Math.max(0, ...vals)
+  const minV = Math.min(0, ...vals)
+  const top = maxV > 0 ? niceMax(maxV) : minV < 0 ? 0 : 1
+  const bottom = minV < 0 ? -niceMax(-minV) : 0
+  const range = top - bottom
+  const y = (v: number) => padT + ((top - v) / range) * innerH
+  const innerW = Math.max(0, w - padL - 4)
+  const step = data.length ? innerW / data.length : 0
+  const barW = Math.max(2, Math.min(34, step * 0.7))
+  const every = Math.max(1, Math.ceil(data.length / Math.max(1, Math.floor(innerW / 46))))
+  const ticks = [...new Set([top, 0, bottom])]
+  const cx = (i: number) => padL + step * i + step / 2
+  const shown = sel !== null ? data[sel] : null
+  const colorOf = (v: number) => (v < 0 ? COLORS.alert : COLORS.profit)
+
+  return (
+    <div className="chart" ref={ref}>
+      {w > 0 && (
+        <svg width={w} height={height} role="img" aria-label={label}>
+          {ticks.map((t) => (
+            <g key={t}>
+              <line x1={padL} x2={w} y1={y(t)} y2={y(t)} stroke={t === 0 ? 'var(--ink-soft, #6b6b6b)' : 'var(--line)'} strokeWidth={t === 0 ? 1.5 : 1} />
+              <text x={padL - 6} y={y(t) + 4} textAnchor="end" className="ax">{compact(t)}</text>
+            </g>
+          ))}
+          {mode === 'line' && data.length > 1 && (
+            <polyline fill="none" stroke={COLORS.profit} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" points={data.map((d, i) => `${cx(i)},${y(d.value)}`).join(' ')} />
+          )}
+          {data.map((d, i) => (
+            <g key={i} onPointerEnter={() => setSel(i)} onClick={() => setSel(i === sel ? null : i)} style={{ cursor: 'pointer' }}>
+              <rect x={padL + step * i} y={padT} width={step} height={innerH} fill="transparent" />
+              {mode === 'bars' ? (
+                d.value !== 0 && (
+                  <rect
+                    x={cx(i) - barW / 2}
+                    y={Math.min(y(0), y(d.value))}
+                    width={barW}
+                    height={Math.max(1, Math.abs(y(d.value) - y(0)))}
+                    fill={colorOf(d.value)}
+                    opacity={sel === null || sel === i ? 1 : 0.45}
+                    rx={Math.min(3, barW / 3)}
+                  />
+                )
+              ) : (
+                <circle cx={cx(i)} cy={y(d.value)} r={sel === i ? 5 : 3.5} fill={colorOf(d.value)} stroke="var(--paper, #fff)" strokeWidth="1.5" />
+              )}
+              {i % every === 0 && <text x={cx(i)} y={height - 6} textAnchor="middle" className="ax">{d.label}</text>}
+            </g>
+          ))}
+        </svg>
+      )}
+      <p className="readout" aria-live="polite">
+        {shown ? (
+          <>
+            <strong>{shown.full}</strong>
+            <span><i style={{ background: colorOf(shown.value) }} />{shown.value < 0 ? 'Loss' : 'Profit'} {money(Math.abs(shown.value))}</span>
+          </>
+        ) : (
+          <span className="muted">Tap a {mode === 'bars' ? 'bar' : 'point'} to see the numbers. Red below the line means a loss.</span>
+        )}
+      </p>
+    </div>
+  )
+}

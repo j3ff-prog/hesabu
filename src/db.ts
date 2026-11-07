@@ -96,6 +96,10 @@ export interface Sale extends Synced {
   total: number
   lines: SaleLine[]
   sent?: 1 // the server has received this sale
+  cash?: number // how much was paid in cash, by M-Pesa, and left on credit (missing on older sales)
+  mpesa?: number
+  credit?: number
+  dueAt?: number // when a credit is to be paid
   voidedAt?: number
   by?: string
   byName?: string
@@ -166,9 +170,11 @@ const touch = <T extends Synced>(row: T): T => ({ ...row, dirty: 1, rev: (row.re
 /** Save a sale and take the items out of stock, all or nothing. */
 export async function recordSale(
   lines: Omit<SaleLine, 'id'>[],
-  method: Method,
-  customer?: string
+  pay: { cash: number; mpesa: number; credit: number },
+  customer?: string,
+  dueAt?: number
 ): Promise<{ id: string; total: number }> {
+  const method: Method = pay.credit >= pay.cash && pay.credit >= pay.mpesa && pay.credit > 0 ? 'credit' : pay.mpesa > pay.cash ? 'mpesa' : 'cash'
   const total = lines.reduce((sum, l) => sum + l.price * l.qty, 0)
   const id = newId()
   await db.transaction('rw', db.products, db.sales, async () => {
@@ -179,6 +185,10 @@ export async function recordSale(
         method,
         customer,
         total,
+        cash: pay.cash,
+        mpesa: pay.mpesa,
+        credit: pay.credit,
+        ...(pay.credit > 0 && dueAt ? { dueAt } : {}),
         lines: lines.map((l) => ({ ...l, id: newId() })),
         ...who()
       } as Sale)

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { customerKey, db, type Customer, type Payment, type Sale } from './db'
 import { methodLabel } from './format'
+import { partsOf } from './pay'
 
 export interface CreditEntry {
   kind: 'sale' | 'payment'
@@ -17,6 +18,7 @@ export interface Debtor {
   phone?: string
   balance: number
   since: number // date of the oldest credit that is still unpaid
+  due?: number // when that credit is to be paid
   entries: CreditEntry[] // newest first
 }
 
@@ -26,7 +28,7 @@ export function buildDebtors(sales: Sale[], payments: Payment[], customers: Cust
   const groups = new Map<string, { sales: Sale[]; pays: Payment[] }>()
 
   for (const s of sales) {
-    if (s.voidedAt || s.method !== 'credit' || !s.customer) continue
+    if (s.voidedAt || partsOf(s).credit <= 0 || !s.customer) continue
     const key = customerKey(s.customer)
     const g = groups.get(key) ?? { sales: [], pays: [] }
     g.sales.push(s)
@@ -37,17 +39,20 @@ export function buildDebtors(sales: Sale[], payments: Payment[], customers: Cust
   const out: Debtor[] = []
   for (const [key, g] of groups) {
     g.sales.sort((a, b) => a.createdAt - b.createdAt)
-    const owed = g.sales.reduce((t, s) => t + s.total, 0)
+    const cr = (s: Sale) => partsOf(s).credit
+    const owed = g.sales.reduce((t, s) => t + cr(s), 0)
     const paid = g.pays.reduce((t, p) => t + p.amount, 0)
     const balance = owed - paid
     if (balance < 1) continue
 
     let left = paid
     let since = g.sales[0].createdAt
+    let due: number | undefined = g.sales[0].dueAt
     for (const s of g.sales) {
-      if (left >= s.total) left -= s.total
+      if (left >= cr(s)) left -= cr(s)
       else {
         since = s.createdAt
+        due = s.dueAt
         break
       }
     }
@@ -59,7 +64,7 @@ export function buildDebtors(sales: Sale[], payments: Payment[], customers: Cust
           kind: 'sale',
           id: s.id,
           at: s.createdAt,
-          amount: s.total,
+          amount: cr(s),
           label: `${s.lines[0].qty} × ${s.lines[0].name}${more > 0 ? ` + ${more} more` : ''}`
         }
       }),
@@ -78,6 +83,7 @@ export function buildDebtors(sales: Sale[], payments: Payment[], customers: Cust
       phone: phones.get(key),
       balance,
       since,
+      due,
       entries
     })
   }
@@ -86,7 +92,7 @@ export function buildDebtors(sales: Sale[], payments: Payment[], customers: Cust
 
 /** Everyone who currently owes money. Updates by itself when a credit sale or payment is saved. */
 export function useDebtors(): Debtor[] | undefined {
-  const sales = useLiveQuery(() => db.sales.where('method').equals('credit').toArray(), [])
+  const sales = useLiveQuery(async () => (await db.sales.toArray()).filter((s) => partsOf(s).credit > 0), [])
   const payments = useLiveQuery(() => db.payments.toArray(), [])
   const customers = useLiveQuery(() => db.customers.toArray(), [])
   return useMemo(

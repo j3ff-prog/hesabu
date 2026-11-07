@@ -1,6 +1,7 @@
 import type { Expense, Payment, Product, Sale } from './db'
 import { dateLabel, money } from './format'
 import { isCost, lineProfit } from './profit'
+import { partsOf } from './pay'
 
 export interface DayFigures {
   live: Sale[] // sales that were not cancelled
@@ -10,15 +11,18 @@ export interface DayFigures {
   credit: number
   collected: number // paid back by credit customers
   cashCollected: number
+  mpesaCollected: number
   spent: number
   cashSpent: number
+  mpesaSpent: number
+  onHand: { cash: number; mpesa: number; total: number } // money you should really have: received minus spent. Credit not yet paid is left out.
   profit: number // see profit.ts
   hasCost: boolean // there is something to base a profit on
 }
 
 export function dayFigures(sales: Sale[], payments: Payment[], expenses: Expense[]): DayFigures {
   const live = sales.filter((s) => !s.voidedAt)
-  const by = (m: string) => live.filter((s) => s.method === m).reduce((t, s) => t + s.total, 0)
+  const by = (m: 'cash' | 'mpesa' | 'credit') => live.reduce((t, s) => t + partsOf(s)[m], 0)
   let earned = 0
   let hasCost = false
   for (const s of live)
@@ -28,6 +32,10 @@ export function dayFigures(sales: Sale[], payments: Payment[], expenses: Expense
       earned += p.margin + p.income
     }
   const sum = (xs: { amount: number }[]) => xs.reduce((t, x) => t + x.amount, 0)
+  const cashIn = by('cash') + sum(payments.filter((p) => p.method === 'cash'))
+  const mpesaIn = by('mpesa') + sum(payments.filter((p) => p.method === 'mpesa'))
+  const cashOut = sum(expenses.filter((e) => e.method === 'cash'))
+  const mpesaOut = sum(expenses.filter((e) => e.method === 'mpesa'))
   return {
     live,
     total: live.reduce((t, s) => t + s.total, 0),
@@ -36,8 +44,11 @@ export function dayFigures(sales: Sale[], payments: Payment[], expenses: Expense
     credit: by('credit'),
     collected: sum(payments),
     cashCollected: sum(payments.filter((p) => p.method === 'cash')),
+    mpesaCollected: sum(payments.filter((p) => p.method === 'mpesa')),
     spent: sum(expenses),
-    cashSpent: sum(expenses.filter((e) => e.method === 'cash')),
+    cashSpent: cashOut,
+    mpesaSpent: mpesaOut,
+    onHand: { cash: cashIn - cashOut, mpesa: mpesaIn - mpesaOut, total: cashIn + mpesaIn - cashOut - mpesaOut },
     profit: earned - sum(expenses.filter(isCost)),
     hasCost
   }
@@ -67,6 +78,7 @@ export function summaryText(shop: string, day: number, f: DayFigures, closing: C
   ]
   if (f.collected > 0) lines.push(`Collected from credit: KES ${money(f.collected)}`)
   if (f.spent > 0) lines.push(`Spent: KES ${money(f.spent)}`)
+  lines.push(`Money on hand: KES ${money(f.onHand.total)} (cash ${money(f.onHand.cash)}, M-Pesa ${money(f.onHand.mpesa)})`)
   if (closing) {
     lines.push('', `Cash check: should be KES ${money(closing.expected)}, counted KES ${money(closing.counted)}`, `*${diffText(closing.diff)}*`)
   }

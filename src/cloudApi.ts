@@ -84,6 +84,7 @@ export interface Api {
   softDelete(table: 'products' | 'payments' | 'expenses', id: string): Promise<void>
 
   adminShops(): Promise<AdminShop[]>
+  adminResetOwner(shopId: string, pin: string): Promise<{ phone: string }>
   adminSetShop(id: string, status: string, plan: string, paidUntil: string | null, note: string, message: string): Promise<void>
 }
 

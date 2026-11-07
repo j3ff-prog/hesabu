@@ -2,6 +2,7 @@ import { STOCK_CATEGORY, type Expense, type Payment, type Product, type Sale } f
 import { addDays, startOfDay } from './format'
 import { isCost, lineProfit } from './profit'
 import type { Debtor } from './creditLogic'
+import { partsOf } from './pay'
 
 export interface DayBar {
   day: number
@@ -26,6 +27,7 @@ export interface Dashboard {
   collected: number
   creditGiven: number
   split: { cash: number; mpesa: number; credit: number }
+  onHand: { cash: number; mpesa: number; total: number } // received minus spent, by cash and M-Pesa. Credit not yet paid is left out.
   daily: DayBar[]
   best: { name: string; qty: number; revenue: number }[]
   hours: { hour: number; count: number; total: number }[]
@@ -65,9 +67,12 @@ export function buildDashboard(
 
   for (const s of inRange) {
     const d = daily[idx(s.createdAt)]
-    d[s.method] += s.total
+    const pt = partsOf(s)
+    for (const k of ['cash', 'mpesa', 'credit'] as const) {
+      d[k] += pt[k]
+      split[k] += pt[k]
+    }
     d.total += s.total
-    split[s.method] += s.total
     const h = hours[new Date(s.createdAt).getHours()]
     h.count++
     h.total += s.total
@@ -86,6 +91,10 @@ export function buildDashboard(
 
   const exp = expenses.filter((e) => e.createdAt >= from && e.createdAt < to)
   for (const e of exp) if (isCost(e)) daily[idx(e.createdAt)].profit -= e.amount
+  const pays = payments.filter((p) => p.createdAt >= from && p.createdAt < to)
+  const sumBy = (xs: { amount: number }[]) => xs.reduce((t, x) => t + x.amount, 0)
+  const onHandCash = split.cash + sumBy(pays.filter((p) => p.method === 'cash')) - sumBy(exp.filter((e) => e.method === 'cash'))
+  const onHandMpesa = split.mpesa + sumBy(pays.filter((p) => p.method === 'mpesa')) - sumBy(exp.filter((e) => e.method === 'mpesa'))
   const spent = exp.filter(isCost).reduce((t, e) => t + e.amount, 0)
   const stockBought = exp.filter((e) => e.category === STOCK_CATEGORY).reduce((t, e) => t + e.amount, 0)
   const catMap = new Map<string, number>()
@@ -123,6 +132,7 @@ export function buildDashboard(
     collected: payments.filter((p) => p.createdAt >= from && p.createdAt < to).reduce((t, p) => t + p.amount, 0),
     creditGiven: split.credit,
     split,
+    onHand: { cash: onHandCash, mpesa: onHandMpesa, total: onHandCash + onHandMpesa },
     daily,
     best: [...bestMap.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 6),
     hours,

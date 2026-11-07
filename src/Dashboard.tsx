@@ -5,9 +5,17 @@ import { useDebtors } from './creditLogic'
 import { buildDashboard } from './analytics'
 import { useAuth } from './Auth'
 import { compact, dateLabel, money, shortDate } from './format'
-import { BarChart, Card, COLORS, HBars, Legend, SplitBar, type BarDatum } from './Charts'
+import { BarChart, Card, COLORS, HBars, Legend, ProfitChart, SplitBar, type BarDatum, type ProfitDatum } from './Charts'
 
-const PERIODS = [7, 30, 90]
+const PERIODS = [1, 7, 30, 90]
+const VIEW_KEY = 'hesabu.profitView'
+const readView = (): 'bars' | 'line' => {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'line' ? 'line' : 'bars'
+  } catch {
+    return 'bars'
+  }
+}
 
 const change = (now: number, before: number): string | null => {
   if (before <= 0) return null
@@ -18,6 +26,15 @@ const change = (now: number, before: number): string | null => {
 export function Dashboard() {
   const { can } = useAuth()
   const [days, setDays] = useState(7)
+  const [view, setViewState] = useState<'bars' | 'line'>(readView)
+  const setView = (v: 'bars' | 'line') => {
+    setViewState(v)
+    try {
+      localStorage.setItem(VIEW_KEY, v)
+    } catch {
+      /* ignore */
+    }
+  }
   const sales = useLiveQuery(() => db.sales.toArray(), [])
   const payments = useLiveQuery(() => db.payments.toArray(), [])
   const expenses = useLiveQuery(() => db.expenses.toArray(), [])
@@ -40,11 +57,7 @@ export function Dashboard() {
       { name: 'Credit', value: x.credit, color: COLORS.credit }
     ]
   }))
-  const profitBars: BarDatum[] = d.daily.map((x, i) => ({
-    label: salesBars[i].label,
-    full: dateLabel(x.day) + ` · profit KES ${money(x.profit)}`,
-    parts: [{ name: 'Profit', value: Math.max(0, x.profit), color: COLORS.profit }]
-  }))
+  const profitPoints: ProfitDatum[] = d.daily.map((x, i) => ({ label: salesBars[i].label, full: dateLabel(x.day), value: x.profit }))
   const hours = d.hours.slice(5, 23)
   const hourBars: BarDatum[] = hours.map((h) => ({
     label: h.hour % 3 === 0 ? `${h.hour % 12 || 12}${h.hour < 12 ? 'am' : 'pm'}` : '',
@@ -58,11 +71,11 @@ export function Dashboard() {
       <div className="segment small" role="radiogroup" aria-label="Period">
         {PERIODS.map((p) => (
           <button key={p} role="radio" aria-checked={days === p} className={days === p ? 'on' : ''} onClick={() => setDays(p)}>
-            {p} days
+            {p === 1 ? 'Today' : `${p} days`}
           </button>
         ))}
       </div>
-      <p className="muted sub-range">{shortDate(d.from)} to {shortDate(d.to - 1)}</p>
+      <p className="muted sub-range">{days === 1 ? 'Today, ' + shortDate(d.from) : `${shortDate(d.from)} to ${shortDate(d.to - 1)}`}</p>
 
       <div className="kpis">
         <div className="kpi">
@@ -90,6 +103,13 @@ export function Dashboard() {
             <p className="kpi-sub">Ingredients, rent, transport and the like{d.stockBought > 0 ? `. Not counting KES ${money(d.stockBought)} of new stock.` : ''}</p>
           </div>
         )}
+        {can('expenses') && (
+          <div className="kpi">
+            <p className="kpi-label">Money on hand</p>
+            <p className={'kpi-num ' + (d.onHand.total < 0 ? 'bad' : '')}>KES {money(d.onHand.total)}</p>
+            <p className="kpi-sub">Cash {money(d.onHand.cash)} · M-Pesa {money(d.onHand.mpesa)}. Received minus spent. Money owed to you is not counted.</p>
+          </div>
+        )}
         <div className="kpi">
           <p className="kpi-label">Owed to you now</p>
           <p className="kpi-num">KES {money(d.owed)}</p>
@@ -104,8 +124,12 @@ export function Dashboard() {
         </Card>
 
         {can('seeCost') && (
-          <Card title="Profit each day" sub="After costs and expenses. Days with a loss show as empty.">
-            <BarChart data={profitBars} label="Profit each day" />
+          <Card title="Profit each day" sub="After costs and expenses. A loss goes below the line in red.">
+            <div className="segment small view-switch" role="radiogroup" aria-label="Chart style">
+              <button role="radio" aria-checked={view === 'bars'} className={view === 'bars' ? 'on' : ''} onClick={() => setView('bars')}>Bars</button>
+              <button role="radio" aria-checked={view === 'line'} className={view === 'line' ? 'on' : ''} onClick={() => setView('line')}>Line</button>
+            </div>
+            <ProfitChart data={profitPoints} mode={view} label="Profit each day" />
           </Card>
         )}
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from './api'
 import { ApiError, type AdminShop, type Session } from './cloudApi'
+import { tempPin } from './pin'
 import { AuthScreen } from './SignIn'
 import { compact, isoDate, money, showPhone, toWaNumber } from './format'
 import { downloadFile, toCsv } from './csv'
@@ -170,7 +171,21 @@ function ShopSheet({ shop, onClose, onSaved }: { shop: ShopRow; onClose: () => v
   const [message, setMessage] = useState(shop.message)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [newPin, setNewPin] = useState<{ pin: string; phone: string } | null>(null)
   const wa = toWaNumber(shop.owner_phone)
+
+  const resetOwner = async () => {
+    setBusy(true)
+    setErr('')
+    try {
+      const pin = tempPin()
+      const r = await api.adminResetOwner(shop.id, pin)
+      setNewPin({ pin, phone: r.phone })
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not reset')
+    }
+    setBusy(false)
+  }
 
   const save = async () => {
     setBusy(true)
@@ -223,6 +238,22 @@ function ShopSheet({ shop, onClose, onSaved }: { shop: ShopRow; onClose: () => v
       <label className="field"><span>Your private note</span><input type="text" value={note} onChange={(e) => setNote(e.target.value)} /></label>
       {err && <p className="hint warn-text" role="alert">{err}</p>}
       <button className="btn primary block" disabled={busy} onClick={save}>Save</button>
+
+      <h3 className="muted-head">Owner forgot their PIN</h3>
+      {newPin ? (
+        <>
+          <p>New PIN for <strong>{showPhone(newPin.phone)}</strong>:</p>
+          <p className="temp-pin">{newPin.pin}</p>
+          {toWaNumber(newPin.phone) && (
+            <button className="btn amber block" onClick={() => openWhatsApp(waLink(toWaNumber(newPin.phone) ?? '', `Hello, your Hesabu PIN has been reset. Sign in with your phone number and this PIN: ${newPin.pin}. Please change it from the menu after signing in.`))}>Send on WhatsApp</button>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="hint">First make sure it really is the owner (call them or check the WhatsApp number). Then set a new PIN.</p>
+          <button className="btn outline block" disabled={busy} onClick={resetOwner}>Set a new PIN for the owner</button>
+        </>
+      )}
     </Sheet>
   )
 }

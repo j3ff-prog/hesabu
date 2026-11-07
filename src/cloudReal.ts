@@ -142,6 +142,15 @@ export const realApi: Api = {
   async adminShops() {
     return ok(await sb().rpc('admin_shops')) as AdminShop[]
   },
+  async adminResetOwner(shopId, pin) {
+    const r = await sb().functions.invoke('add-staff', { body: { action: 'admin-reset', shopId, pin } })
+    if (r.error) {
+      let msg = r.error.message
+      try { msg = (await (r.error as unknown as { context: Response }).context.json()).error ?? msg } catch { /* keep message */ }
+      throw new ApiError('unknown', msg)
+    }
+    return { phone: (r.data as { phone: string }).phone }
+  },
   async adminSetShop(id, status, plan, paidUntil, note, message) {
     ok(await sb().rpc('admin_set_shop', { p_shop: id, p_status: status, p_plan: plan, p_paid_until: paidUntil, p_note: note, p_message: message }))
   }

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { DownloadIcon, LockIcon, Logo, PlusIcon } from './Icons'
 import { unsentCount, useAuth } from './Auth'
 import { ROLE_LABEL } from './rights'
+import { SUPPORT_EMAIL, supportLink } from './format'
 import { Sheet } from './Sheet'
 import { useSyncStatus } from './sync'
 
@@ -102,6 +103,12 @@ export function MenuSheet({ shop, open, onClose }: { shop: string; open: (p: Pan
         {can('settings') && item('Shop settings', 'Name and owner’s number', () => open('settings'))}
         {item('Change my PIN', 'Choose a new PIN', () => open('pin'))}
         {shops.length > 1 && shops.filter((s) => s.id !== shopId).map((s) => item('Switch to ' + s.name, ROLE_LABEL[s.role], () => switchShop(s.id)))}
+        <li>
+          <a className="menu-item" href={supportLink(`Hesabu help: ${shop}`)}>
+            <span>Help</span>
+            <span className="muted">{SUPPORT_EMAIL}</span>
+          </a>
+        </li>
       </ul>
       {sure !== null && (
         <p className="hint warn-text" role="alert">

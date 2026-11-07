@@ -2088,3 +2088,11 @@ h2 {
   margin: 0.5rem 0;
   font-variant-numeric: tabular-nums;
 }
+
+.onhand { padding: 1rem 1.1rem; border-radius: 14px; background: var(--card, #fff); border: 1px solid var(--line); margin-top: 0.75rem; }
+.onhand-num { font-size: 1.9rem; font-weight: 700; margin: 0.15rem 0 0.5rem; font-variant-numeric: tabular-nums; }
+.onhand-num span { font-size: 0.9rem; font-weight: 500; opacity: 0.7; }
+.onhand .bad, .kpi-num.bad, .hero-split .bad { color: var(--alert, #c23b32); }
+.view-switch { margin-bottom: 0.5rem; max-width: 12rem; }
+.split-in { gap: 0.6rem; }
+a.menu-item { text-decoration: none; color: inherit; display: flex; }
