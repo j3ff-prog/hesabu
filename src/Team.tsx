@@ -82,7 +82,7 @@ export function TeamSheet({ onClose }: { onClose: () => void }) {
 }
 
 const loginText = (shop: string, name: string, phone: string, pin: string): string =>
-  `Hello ${name}, you can now use Hesabu for ${shop}.\n\nOpen the app, choose "Sign in", and use:\nPhone: ${showPhone(phone)}\nPIN: ${pin}\n\nYou can change your PIN from the menu after you sign in.`
+  `Hello ${name}, you can now use Tallify for ${shop}.\n\nOpen the app, choose "Sign in", and use:\nPhone: ${showPhone(phone)}\nPIN: ${pin}\n\nYou can change your PIN from the menu after you sign in.`
 
 function PinCard({ shop, name, phone, pin, onDone }: { shop: string; name: string; phone: string; pin: string; onDone: () => void }) {
   return (
@@ -114,7 +114,7 @@ function StaffForm({ shopId, shopName, onClose }: { shopId: string; shopName: st
       <Sheet title="Person added" onClose={onClose}>
         {made.existing ? (
           <>
-            <p><strong>{name}</strong> already has a Hesabu account, so they keep their own PIN. They can open the app and choose your shop.</p>
+            <p><strong>{name}</strong> already has a Tallify account, so they keep their own PIN. They can open the app and choose your shop.</p>
             <button className="btn primary block" onClick={onClose}>Done</button>
           </>
         ) : (
@@ -146,7 +146,7 @@ function StaffForm({ shopId, shopName, onClose }: { shopId: string; shopName: st
       <label className="field">
         <span>Their PIN (6 digits)</span>
         <input className="pin-input" inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
-        <small className="hint">We made one up. You can change it. If they already use Hesabu, their own PIN stays.</small>
+        <small className="hint">We made one up. You can change it. If they already use Tallify, their own PIN stays.</small>
       </label>
       {err && <p className="hint warn-text" role="alert">{err}</p>}
       <button

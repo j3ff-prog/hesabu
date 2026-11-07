@@ -185,7 +185,7 @@ function Upload({ onDone }: { onDone: (m: string) => void }) {
     <>
       <h3 className="muted-head">Add many items at once</h3>
       <p className="hint spaced">Fill in a spreadsheet, save it as CSV, and upload it. Only Name and Selling price are needed. Put Service in the Type column for food and services.</p>
-      <button className="btn outline block" onClick={() => downloadFile('hesabu-stock-template.csv', TEMPLATE)}>Download the template</button>
+      <button className="btn outline block" onClick={() => downloadFile('tallify-stock-template.csv', TEMPLATE)}>Download the template</button>
       <input ref={fileRef} type="file" accept=".csv,text/csv,.txt,.xlsx,.xls" hidden onChange={(e) => void pick(e.target.files?.[0])} />
       {!preview && (
         <button className="btn outline block gap-top" onClick={() => fileRef.current?.click()}>Choose a CSV file</button>

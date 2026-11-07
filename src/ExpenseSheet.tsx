@@ -69,7 +69,7 @@ export function ExpenseSheet({ onClose, onSaved }: { onClose: () => void; onSave
       </div>
 
       {category === 'Ingredients' && (
-        <p className="hint">Flour, milk, cooking gas and other things you use up to make food. They are taken off your profit, so Hesabu can show what your food and services really earn.</p>
+        <p className="hint">Flour, milk, cooking gas and other things you use up to make food. They are taken off your profit, so Tallify can show what your food and services really earn.</p>
       )}
 
       {restock && (

@@ -39,8 +39,8 @@ export const useAuth = (): AuthValue => {
 }
 
 // What this device last knew, so the app opens with no signal.
-const CTX_KEY = 'hesabu.ctx'
-const ACTIVE_KEY = 'hesabu.active'
+const CTX_KEY = 'tallify.ctx'
+const ACTIVE_KEY = 'tallify.active'
 interface Cached {
   session: Session
   shops: ShopInfo[]

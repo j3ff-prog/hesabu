@@ -117,7 +117,7 @@ export interface Meta {
   value: string
 }
 
-export class HesabuDB extends Dexie {
+export class TallifyDB extends Dexie {
   products!: EntityTable<Product, 'id'>
   sales!: EntityTable<Sale, 'id'>
   payments!: EntityTable<Payment, 'id'>
@@ -143,11 +143,11 @@ export class HesabuDB extends Dexie {
 }
 
 /** Each shop has its own database on the device, so someone who belongs to two shops never mixes them up. */
-export let db: HesabuDB = new HesabuDB('hesabu-none')
-export function openShopDb(shopId: string): HesabuDB {
-  if (db.name !== `hesabu-${shopId}`) {
+export let db: TallifyDB = new TallifyDB('tallify-none')
+export function openShopDb(shopId: string): TallifyDB {
+  if (db.name !== `tallify-${shopId}`) {
     db.close()
-    db = new HesabuDB(`hesabu-${shopId}`)
+    db = new TallifyDB(`tallify-${shopId}`)
   }
   return db
 }
@@ -163,7 +163,7 @@ const who = () => (actor ? { by: actor.id, byName: actor.name } : {})
 
 /** Tells the sync engine something changed here. */
 export const changed = (): void => {
-  window.dispatchEvent(new Event('hesabu-local-change'))
+  window.dispatchEvent(new Event('tallify-local-change'))
 }
 const touch = <T extends Synced>(row: T): T => ({ ...row, dirty: 1, rev: (row.rev ?? 0) + 1 })
 

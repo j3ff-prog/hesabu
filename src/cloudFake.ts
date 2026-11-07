@@ -2,7 +2,7 @@ import { ApiError, type Api } from './cloudApi'
 
 /** Test stand-in: forwards every call to a small server (tests/fakeserver.mjs) that behaves like the Supabase side. */
 const base = (import.meta.env.VITE_FAKE_CLOUD as string | undefined) ?? ''
-const TOKEN = 'hesabu.fakeToken'
+const TOKEN = 'tallify.fakeToken'
 const token = (): string => {
   try {
     return localStorage.getItem(TOKEN) ?? ''

@@ -1,21 +1,21 @@
-# Hesabu setup (Supabase version)
+# Tallify setup (Supabase version)
 
-## 1. Database (once)
-Supabase dashboard > SQL Editor. Run these in order, each as a new query:
-1. `supabase/migrations/0001_init.sql` (you already did this)
-2. `supabase/migrations/0002_push_sale.sql`
+## 0. Moving from the old test version (once)
+SQL Editor > run `supabase/cleanup-test-data.sql`. This deletes the old test account and shop. Then clear the site data on your phone (or sign out), open the app and make a new account. After that, do step 4 again to make yourself admin.
 
-Authentication > Providers > Email: "Confirm email" must be OFF (done).
+## 1. Database (Supabase > SQL Editor)
+Run each file as a NEW query, in this order. Skip any you already ran:
+1. `0001_init.sql` (done)
+2. `0002_push_sale.sql`
+3. `0003_split_pay.sql`
+To run one: open the file in Notepad, copy everything, paste into the SQL Editor, press Run. It should say "Success".
 
-## 2. Staff function (lets the owner add staff)
-Needs the Supabase CLI on your computer:
-```
-npm i -g supabase
-supabase login
-supabase link --project-ref rkvjhveblhiprvyttxus
-supabase functions deploy add-staff
-```
-The service key is provided to the function by Supabase itself. Never paste it anywhere.
+## 2. Staff function (so owners can add staff and you can reset PINs)
+No computer tools needed:
+1. Supabase > Edge Functions > "Deploy a new function" > "Via Editor".
+2. Name it exactly `add-staff`.
+3. Delete the sample code, paste everything from `supabase/functions/add-staff/index.ts`, press Deploy.
+Do it again with the new file every time it changes.
 
 ## 3. Put the app online
 Copy these files over your project (replace `src`, `supabase`, `package.json`, `package-lock.json`, add `.npmrc`), delete `src/cloud.ts` and the `worker` folder if present, then:
@@ -24,11 +24,11 @@ git add . && git commit -m "Supabase" && git push
 ```
 Cloudflare rebuilds by itself. No environment variables are needed (the project address and public key are built in).
 
-## 4. You as Hesabu admin
+## 4. You as Tallify admin
 Sign up in the app with your own number once. Then SQL Editor:
 ```
 insert into platform_admins (user_id)
-select id from auth.users where email = '2547XXXXXXXX@hesabu.app';
+select id from auth.users where email = '2547XXXXXXXX@tallify.app';
 ```
 (use your number, 2547... format). Open `https://YOUR-SITE/#/admin` and sign in.
 

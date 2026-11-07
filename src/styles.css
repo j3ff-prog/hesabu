@@ -1855,7 +1855,7 @@ h2 {
     border-right: 1px solid var(--line);
   }
   .tabs::before {
-    content: 'hesabu';
+    content: 'tallify';
     font-family: var(--display);
     font-weight: 700;
     font-size: 30px;

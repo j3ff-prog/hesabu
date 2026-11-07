@@ -361,7 +361,7 @@ export function startSync(api: Api, shopId: string, role: Role, onDenied?: () =>
     timer = window.setTimeout(() => void run(), 1500)
   }
   const onOnline = () => void run()
-  window.addEventListener('hesabu-local-change', onChange)
+  window.addEventListener('tallify-local-change', onChange)
   window.addEventListener('online', onOnline)
   const tick = window.setInterval(() => void run(), 30_000)
   void countPending().then((pending) => set({ pending }))
@@ -370,7 +370,7 @@ export function startSync(api: Api, shopId: string, role: Role, onDenied?: () =>
   return {
     stop: () => {
       stopped = true
-      window.removeEventListener('hesabu-local-change', onChange)
+      window.removeEventListener('tallify-local-change', onChange)
       window.removeEventListener('online', onOnline)
       window.clearInterval(tick)
       window.clearTimeout(timer)

@@ -9,7 +9,7 @@ import { compact, dateLabel, money, shortDate } from './format'
 import { BarChart, Card, COLORS, HBars, Legend, ProfitChart, SplitBar, type BarDatum, type ProfitDatum } from './Charts'
 
 const PERIODS = [1, 7, 30, 90]
-const VIEW_KEY = 'hesabu.profitView'
+const VIEW_KEY = 'tallify.profitView'
 const readView = (): 'bars' | 'line' => {
   try {
     return localStorage.getItem(VIEW_KEY) === 'line' ? 'line' : 'bars'
@@ -92,7 +92,7 @@ export function Dashboard() {
             <div><dt>Owed to you by customers</dt><dd>{money(worth.owed)}</dd></div>
           </dl>
           <p className="hint">
-            Counted from your records since you started using Hesabu. Money you had before, or took out for yourself, is not included.
+            Counted from your records since you started using Tallify. Money you had before, or took out for yourself, is not included.
             {worth.unpriced > 0 ? ` ${worth.unpriced} item${worth.unpriced === 1 ? '' : 's'} in stock ${worth.unpriced === 1 ? 'has' : 'have'} no buying price and ${worth.unpriced === 1 ? 'is' : 'are'} left out.` : ''}
           </p>
         </section>

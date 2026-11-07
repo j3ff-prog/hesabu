@@ -1,4 +1,4 @@
--- Hesabu database. Run once in the Supabase SQL editor (or with the Supabase CLI).
+-- Tallify database. Run once in the Supabase SQL editor (or with the Supabase CLI).
 -- Every table is protected by row level security: a person can only touch the shops they belong to,
 -- and what they can do depends on their role. Attendants cannot read buying prices or expenses AT ALL.
 
@@ -357,7 +357,7 @@ begin
   update members set role = p_role, active = p_active where shop_id = p_shop and user_id = p_user and role <> 'owner';
 end $$;
 
--- Hesabu admin only: every shop with usage totals (no individual sales).
+-- Tallify admin only: every shop with usage totals (no individual sales).
 create function public.admin_shops() returns table (
   id uuid, name text, owner_phone text, created_at timestamptz, status text, trial_ends_at timestamptz,
   paid_until timestamptz, plan text, admin_note text, message text,
@@ -412,7 +412,7 @@ grant execute on function public.create_shop(text, text, text), public.set_membe
 -- Used only by the add-staff Edge Function (service role): find an existing login by phone number.
 create function public.user_by_phone(p_phone text) returns uuid
 language sql stable security definer set search_path = public, auth as $$
-  select id from auth.users where email = p_phone || '@hesabu.app'
+  select id from auth.users where email = p_phone || '@tallify.app'
 $$;
 revoke execute on function public.user_by_phone(text) from public, anon, authenticated;
 grant execute on function public.user_by_phone(text) to service_role;

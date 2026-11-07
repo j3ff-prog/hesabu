@@ -11,7 +11,7 @@ const cors = {
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: cors })
 
 const PHONE = /^254[17]\d{8}$/ // 2547XXXXXXXX or 2541XXXXXXXX
-const email = (phone: string) => `${phone}@hesabu.app`
+const email = (phone: string) => `${phone}@tallify.app`
 const password = (pin: string) => `hs-${pin}` // Supabase needs 6+ characters; the PIN itself is 6 digits in the app
 
 Deno.serve(async (req) => {
@@ -32,6 +32,17 @@ Deno.serve(async (req) => {
     return reply({ error: 'Bad request' }, 400)
   }
 
+  // The Tallify admin can set a new PIN for a shop's owner who has lost theirs.
+  if (b.action === 'admin-reset') {
+    const { data: isAdmin } = await admin.from('platform_admins').select('user_id').eq('user_id', who.user.id).maybeSingle()
+    if (!isAdmin) return reply({ error: 'Not allowed' }, 403)
+    if (!/^\d{6}$/.test(b.pin ?? '')) return reply({ error: 'The PIN must be 6 digits' }, 400)
+    const { data: o } = await admin.from('members').select('user_id, phone').eq('shop_id', b.shopId ?? '').eq('role', 'owner').maybeSingle()
+    if (!o) return reply({ error: 'Owner not found' }, 404)
+    const { error } = await admin.auth.admin.updateUserById(o.user_id, { password: password(b.pin!) })
+    return error ? reply({ error: 'Could not reset the PIN' }, 500) : reply({ ok: true, phone: o.phone })
+  }
+
   const { data: me } = await admin.from('members').select('role, active').eq('shop_id', b.shopId ?? '').eq('user_id', who.user.id).maybeSingle()
   if (!me || !me.active || me.role !== 'owner') return reply({ error: 'Only the owner can do this' }, 403)
 
@@ -45,7 +56,7 @@ Deno.serve(async (req) => {
     if (!m || m.role === 'owner') return reply({ error: 'Person not found' }, 404)
     // A person who belongs to several shops has one login: only reset the PIN if this is the only shop they are in.
     const { count } = await admin.from('members').select('*', { count: 'exact', head: true }).eq('user_id', m.user_id)
-    if ((count ?? 0) > 1) return reply({ error: 'This person uses Hesabu in more than one shop, so they must change their own PIN.' }, 409)
+    if ((count ?? 0) > 1) return reply({ error: 'This person uses Tallify in more than one shop, so they must change their own PIN.' }, 409)
     const { error } = await admin.auth.admin.updateUserById(m.user_id, { password: password(pin) })
     return error ? reply({ error: 'Could not reset the PIN' }, 500) : reply({ ok: true })
   }
@@ -61,7 +72,7 @@ Deno.serve(async (req) => {
   if (created.data?.user) {
     userId = created.data.user.id
   } else {
-    // Already has a Hesabu login (for example the developer joining as staff). Keep their own PIN.
+    // Already has a Tallify login (for example the developer joining as staff). Keep their own PIN.
     const { data: id } = await admin.rpc('user_by_phone', { p_phone: phone })
     if (!id) return reply({ error: 'Could not create the login' }, 500)
     userId = id as string

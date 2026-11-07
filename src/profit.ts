@@ -1,7 +1,7 @@
 import { STOCK_CATEGORY, type Expense, type SaleLine } from './db'
 
 /**
- * How Hesabu works out profit, in one place:
+ * How Tallify works out profit, in one place:
  *  - Goods with a buying price: selling price minus buying price.
  *  - Food you make and services (no buying price): the whole selling price counts as income.
  *  - Money spent on costs (ingredients, rent, transport, salaries...) is taken off.

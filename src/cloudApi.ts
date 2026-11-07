@@ -88,6 +88,6 @@ export interface Api {
   adminSetShop(id: string, status: string, plan: string, paidUntil: string | null, note: string, message: string): Promise<void>
 }
 
-export const PHONE_EMAIL = (phone: string): string => `${phone}@hesabu.app`
+export const PHONE_EMAIL = (phone: string): string => `${phone}@tallify.app`
 /** Supabase wants a password of at least 6 characters, so the 6-digit PIN gets a short prefix. */
 export const PIN_PASSWORD = (pin: string): string => `hs-${pin}`

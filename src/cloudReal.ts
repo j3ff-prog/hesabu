@@ -25,7 +25,7 @@ const ok = <T>(r: { data: T | null; error: { message?: string } | null }): T => 
   return r.data as T
 }
 
-const phoneOf = (email: string | undefined): string => (email ?? '').replace('@hesabu.app', '')
+const phoneOf = (email: string | undefined): string => (email ?? '').replace('@tallify.app', '')
 const session = (u: { id: string; email?: string }): Session => ({ userId: u.id, phone: phoneOf(u.email) })
 
 export const realApi: Api = {

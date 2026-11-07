@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 
-const KEY = 'hesabu.shop'
+const KEY = 'tallify.shop'
 
 function read(): string {
   try {
@@ -24,7 +24,7 @@ export function useShop(): [string, (name: string) => void] {
   return [name, save]
 }
 
-const NOTE_KEY = 'hesabu.seedNoteDismissed'
+const NOTE_KEY = 'tallify.seedNoteDismissed'
 export const seedNoteDismissed = (): boolean => {
   try {
     return localStorage.getItem(NOTE_KEY) === '1'
@@ -41,8 +41,8 @@ export const dismissSeedNote = (): void => {
 }
 
 // Small settings kept on the device. Read fresh each time so every screen sees the latest value.
-const OWNER_KEY = 'hesabu.owner'
-const FLOAT_KEY = 'hesabu.float'
+const OWNER_KEY = 'tallify.owner'
+const FLOAT_KEY = 'tallify.float'
 
 const get = (k: string): string => {
   try {

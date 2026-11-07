@@ -29,7 +29,7 @@ function PayButton() {
     <>
       {' '}
       <a className="btn amber pay-btn" href={PAY_URL} target="_blank" rel="noopener noreferrer">Pay KES {PRICE}</a>
-      <span className="hint block-hint">On the payment page, type the phone number you sign in to Hesabu with.</span>
+      <span className="hint block-hint">On the payment page, type the phone number you sign in to Tallify with.</span>
     </>
   )
 }
@@ -55,7 +55,7 @@ export function Ribbon({ shop, open }: { shop: string; open: (p: Panel) => void 
   return (
     <>
       <header className="ribbon">
-        <Link to="/" className="ribbon-brand" aria-label="Hesabu, go to Sell">
+        <Link to="/" className="ribbon-brand" aria-label="Tallify, go to Sell">
           <Logo size={30} />
         </Link>
         <div className="ribbon-shop">
@@ -120,7 +120,7 @@ export function MenuSheet({ shop, open, onClose }: { shop: string; open: (p: Pan
         {item('Change my PIN', 'Choose a new PIN', () => open('pin'))}
         {shops.length > 1 && shops.filter((s) => s.id !== shopId).map((s) => item('Switch to ' + s.name, ROLE_LABEL[s.role], () => switchShop(s.id)))}
         <li>
-          <a className="menu-item" href={supportLink(`Hesabu help: ${shop}`)}>
+          <a className="menu-item" href={supportLink(`Tallify help: ${shop}`)}>
             <span>Help</span>
             <span className="muted">{SUPPORT_EMAIL}</span>
           </a>

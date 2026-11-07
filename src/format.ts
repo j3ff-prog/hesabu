@@ -64,8 +64,8 @@ export const compact = (n: number): string => {
 
 /** Where customers go for help. */
 export const SUPPORT_EMAIL = 'nexus.softwareske@gmail.com'
-export const supportLink = (subject = 'Hesabu help'): string => `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`
+export const supportLink = (subject = 'Tallify help'): string => `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`
 
 /** Where shops pay their KES 500 a month. */
-export const PAY_URL = 'https://paystack.shop/pay/hesabu'
+export const PAY_URL = 'https://paystack.shop/pay/tallify'
 export const PRICE = 500
