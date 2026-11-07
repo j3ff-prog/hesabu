@@ -2096,3 +2096,7 @@ h2 {
 .view-switch { margin-bottom: 0.5rem; max-width: 12rem; }
 .split-in { gap: 0.6rem; }
 a.menu-item { text-decoration: none; color: inherit; display: flex; }
+
+.banner.soft { background: var(--card, #fff7e6); }
+.pay-btn { margin-left: 0.5rem; padding: 0.3rem 0.8rem; min-height: 0; text-decoration: none; display: inline-block; }
+.block-hint { display: block; font-size: 0.8rem; opacity: 0.8; margin-top: 0.2rem; }

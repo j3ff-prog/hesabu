@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { DownloadIcon, LockIcon, Logo, PlusIcon } from './Icons'
 import { unsentCount, useAuth } from './Auth'
 import { ROLE_LABEL } from './rights'
-import { SUPPORT_EMAIL, supportLink } from './format'
+import { PAY_URL, PRICE, SUPPORT_EMAIL, shortDate, supportLink } from './format'
 import { Sheet } from './Sheet'
 import { useSyncStatus } from './sync'
 
@@ -24,6 +24,16 @@ const useOnline = (): boolean => {
   return on
 }
 
+function PayButton() {
+  return (
+    <>
+      {' '}
+      <a className="btn amber pay-btn" href={PAY_URL} target="_blank" rel="noopener noreferrer">Pay KES {PRICE}</a>
+      <span className="hint block-hint">On the payment page, type the phone number you sign in to Hesabu with.</span>
+    </>
+  )
+}
+
 function syncText(online: boolean, s: { state: string; pending: number }): string {
   const n = s.pending
   if (!online || s.state === 'offline') return n > 0 ? `Offline · ${n} waiting to send` : 'Offline, still working'
@@ -38,6 +48,8 @@ export function Ribbon({ shop, open }: { shop: string; open: (p: Panel) => void 
   const { me, can, readOnly, shopState } = useAuth()
   const online = useOnline()
   const sync = useSyncStatus()
+  const soon = shopState?.until ? Math.ceil((new Date(shopState.until).getTime() - Date.now()) / 86400000) : null
+  const soonShown = soon !== null && soon <= 7 ? soon : null
   const data = can('export') || can('importStock')
 
   return (
@@ -70,7 +82,15 @@ export function Ribbon({ shop, open }: { shop: string; open: (p: Panel) => void 
       </header>
       {readOnly && (
         <div className="banner" role="status">
-          <strong>Your subscription has ended.</strong> {shopState?.message || 'You can look at your records and download your data. Renew to record new sales.'}
+          <strong>{shopState?.status === 'trial' ? 'Your free month has ended.' : 'Your subscription has ended.'}</strong>{' '}
+          {shopState?.message || 'You can look at your records and download your data. Pay to record new sales.'}
+          {me.role === 'owner' && <PayButton />}
+        </div>
+      )}
+      {!readOnly && soonShown !== null && me.role === 'owner' && (
+        <div className="banner soft" role="status">
+          {shopState?.status === 'trial' ? 'Your free month ends' : 'Your subscription ends'} {soonShown <= 0 ? 'today' : soonShown === 1 ? 'tomorrow' : `in ${soonShown} days`}.
+          <PayButton />
         </div>
       )}
     </>
@@ -78,7 +98,7 @@ export function Ribbon({ shop, open }: { shop: string; open: (p: Panel) => void 
 }
 
 export function MenuSheet({ shop, open, onClose }: { shop: string; open: (p: Panel) => void; onClose: () => void }) {
-  const { me, can, signOut, shops, switchShop, shopId } = useAuth()
+  const { me, can, signOut, shops, switchShop, shopId, shopState } = useAuth()
   const [sure, setSure] = useState<number | null>(null)
   const data = can('export') || can('importStock')
   const item = (label: string, hint: string, go: () => void) => (
@@ -101,6 +121,7 @@ export function MenuSheet({ shop, open, onClose }: { shop: string; open: (p: Pan
         {data && item('Data', 'Download spreadsheets, upload stock', () => open('data'))}
         {can('team') && item('Team', 'Staff, roles and PINs', () => open('team'))}
         {can('settings') && item('Shop settings', 'Name and owner’s number', () => open('settings'))}
+        {me.role === 'owner' && item('Subscription', subText(shopState), () => window.open(PAY_URL, '_blank', 'noopener'))}
         {item('Change my PIN', 'Choose a new PIN', () => open('pin'))}
         {shops.length > 1 && shops.filter((s) => s.id !== shopId).map((s) => item('Switch to ' + s.name, ROLE_LABEL[s.role], () => switchShop(s.id)))}
         <li>
@@ -120,4 +141,12 @@ export function MenuSheet({ shop, open, onClose }: { shop: string; open: (p: Pan
       </button>
     </Sheet>
   )
+}
+
+function subText(s: { status: string; until: string | null } | null): string {
+  if (!s) return `KES ${PRICE} a month. Tap to pay.`
+  const d = s.until ? shortDate(new Date(s.until).getTime()) : ''
+  if (s.status === 'trial') return `Free until ${d}. Tap to pay KES ${PRICE}.`
+  if (s.status === 'active') return `Paid until ${d}. Tap to add a month.`
+  return `Stopped. Tap to pay KES ${PRICE}.`
 }

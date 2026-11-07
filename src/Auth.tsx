@@ -178,7 +178,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sync.current = h
     void loadState(shopId)
     const t = window.setInterval(() => void refresh(), 5 * 60_000)
+    const back = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+    document.addEventListener('visibilitychange', back)
     return () => {
+      document.removeEventListener('visibilitychange', back)
       window.clearInterval(t)
       h.stop()
       sync.current = null
