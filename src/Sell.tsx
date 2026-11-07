@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { customerKey, db, recordSale, voidSale, type Method, type Product, isService } from './db'
+import { customerKey, db, recordSale, saveProduct, voidSale, type Method, type Product, isService } from './db'
 import { money, methodLabel, isoDate, addDays, startOfDay } from './format'
 import { Sheet } from './Sheet'
 import { MinusIcon, PlusIcon, SearchIcon } from './Icons'
@@ -16,6 +16,8 @@ export function Sell() {
   const [cart, setCart] = useState<Cart>({})
   const [q, setQ] = useState('')
   const [reviewing, setReviewing] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [extras, setExtras] = useState<Product[]>([]) // one-time items typed in during this sale
   const toast = useToast()
   const { can, readOnly } = useAuth()
 
@@ -29,8 +31,8 @@ export function Sell() {
     })
 
   const lines = useMemo(
-    () => (products ?? []).filter((p) => cart[p.id]).map((p) => ({ p, qty: cart[p.id] })),
-    [products, cart]
+    () => [...(products ?? []), ...extras].filter((p) => cart[p.id]).map((p) => ({ p, qty: cart[p.id] })),
+    [products, extras, cart]
   )
   const count = lines.reduce((s, l) => s + l.qty, 0)
   const total = lines.reduce((s, l) => s + l.qty * l.p.price, 0)
@@ -81,6 +83,10 @@ export function Sell() {
         />
       </label>
 
+      <button className="btn outline add-item" onClick={() => setAdding(true)}>
+        <PlusIcon /> Add an item that is not on the list
+      </button>
+
       {shown.length === 0 && <p className="muted pad">Nothing matches “{q}”.</p>}
 
       <div className="tiles">
@@ -99,6 +105,25 @@ export function Sell() {
             Review sale
           </button>
         </div>
+      )}
+
+      {adding && (
+        <AddItemSheet
+          name={q.trim()}
+          canSave={can('editStock')}
+          onClose={() => setAdding(false)}
+          onAdd={async (name, price, save) => {
+            let id: string
+            if (save) id = await saveProduct({ name, price, cost: 0, stock: 0, lowAt: 0, kind: 'service' })
+            else {
+              id = 'x:' + crypto.randomUUID()
+              setExtras((e) => [...e, { id, name, price, cost: 0, stock: 0, lowAt: 0, kind: 'service', createdAt: Date.now(), dirty: 0, rev: 0 }])
+            }
+            add(id)
+            setQ('')
+            setAdding(false)
+          }}
+        />
       )}
 
       {reviewing && (
@@ -195,7 +220,7 @@ function Checkout({
     const typed = customer.trim()
     const who = typed ? known.find((k) => k.key === customerKey(typed))?.name ?? typed : undefined
     const { id, total: t } = await recordSale(
-      lines.map(({ p, qty }) => ({ productId: p.id, name: p.name, qty, price: p.price, cost: p.cost, ...(isService(p) ? { service: true } : {}) })),
+      lines.map(({ p, qty }) => ({ productId: p.id.startsWith('x:') ? '' : p.id, name: p.name, qty, price: p.price, cost: p.cost, ...(isService(p) ? { service: true } : {}) })),
       { cash: cashAmt, mpesa: mpesaAmt, credit: creditAmt },
       who,
       isCredit ? new Date(due + 'T23:59:59').getTime() : undefined
@@ -328,4 +353,33 @@ function useKnownBuyers(): { key: string; name: string }[] {
     }
     return order.map((key) => ({ key, name: first.get(key) ?? key }))
   }, [recent])
+}
+
+function AddItemSheet({ name: start, canSave, onClose, onAdd }: { name: string; canSave: boolean; onClose: () => void; onAdd: (name: string, price: number, save: boolean) => void }) {
+  const [name, setName] = useState(start)
+  const [price, setPrice] = useState('')
+  const [save, setSave] = useState(canSave)
+  const ok = name.trim().length >= 2 && Number(price) > 0
+  return (
+    <Sheet title="Add an item to this sale" onClose={onClose}>
+      <label className="field">
+        <span>What is it?</span>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Delivery, extra cup" autoFocus />
+      </label>
+      <label className="field">
+        <span>Price (KES)</span>
+        <input type="number" inputMode="numeric" min="1" value={price} onChange={(e) => setPrice(e.target.value)} />
+      </label>
+      {canSave && (
+        <label className="check">
+          <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
+          <span>Keep it on my list for next time</span>
+        </label>
+      )}
+      {!canSave && <p className="hint">This sells it once. The owner can add it to the list.</p>}
+      <button className="btn primary block" disabled={!ok} onClick={() => onAdd(name.trim(), Number(price), save)}>
+        Add to sale
+      </button>
+    </Sheet>
+  )
 }

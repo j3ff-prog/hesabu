@@ -111,7 +111,7 @@ export function MenuSheet({ shop, open, onClose }: { shop: string; open: (p: Pan
   )
   const out = async () => {
     const n = await unsentCount()
-    if (n > 0 && sure === null) return setSure(n)
+    if ((n > 0 || !navigator.onLine) && sure === null) return setSure(n)
     await signOut()
   }
   return (
@@ -133,7 +133,8 @@ export function MenuSheet({ shop, open, onClose }: { shop: string; open: (p: Pan
       </ul>
       {sure !== null && (
         <p className="hint warn-text" role="alert">
-          {sure} change{sure === 1 ? ' is' : 's are'} still waiting to be sent. If you sign out now, connect to the internet first, or they stay on this phone until you sign in again.
+          {!navigator.onLine && 'You are offline. Signing in needs internet, so if you sign out now you cannot get back in until you are online. '}
+          {sure > 0 && `${sure} change${sure === 1 ? ' is' : 's are'} still waiting to be sent. They stay safe on this phone until you sign in again.`}
         </p>
       )}
       <button className="btn outline block gap-top" onClick={out}>

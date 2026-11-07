@@ -245,14 +245,16 @@ export async function savePhone(key: string, name: string, phone: string): Promi
 
 export type ProductInput = Omit<Product, 'id' | 'createdAt' | 'dirty' | 'rev'>
 
-export async function saveProduct(input: ProductInput, id?: string): Promise<void> {
+export async function saveProduct(input: ProductInput, id?: string): Promise<string> {
   if (id) {
     const cur = await db.products.get(id)
     if (cur) await db.products.put(touch({ ...cur, ...input }))
   } else {
-    await db.products.add(touch({ ...input, id: newId(), createdAt: Date.now() } as Product))
+    id = newId()
+    await db.products.add(touch({ ...input, id, createdAt: Date.now() } as Product))
   }
   changed()
+  return id
 }
 
 export async function removeProduct(id: string): Promise<void> {

@@ -78,6 +78,7 @@ export function AuthScreen({ onDone }: { onDone: (s: Session, shops: ShopInfo[])
       <button className="btn plain-btn block" onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setErr(''); setPin(''); setAgain('') }}>
         {mode === 'in' ? 'New here? Make an account' : 'I already have an account'}
       </button>
+      <p className="hint center">Signing in needs internet. After that, the app opens without it until you sign out.</p>
       {mode === 'in' && <p className="hint center">Forgot your PIN? Staff: ask your shop owner to set a new one. Owners: email {SUPPORT_EMAIL} from the email or WhatsApp number you gave us.</p>}
     </main>
   )

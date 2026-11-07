@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from './db'
+import { isService, db } from './db'
 import { useDebtors } from './creditLogic'
+import { partsOf } from './pay'
 import { buildDashboard } from './analytics'
 import { useAuth } from './Auth'
 import { compact, dateLabel, money, shortDate } from './format'
@@ -45,6 +46,19 @@ export function Dashboard() {
     () => (sales && payments && expenses && products && debtors ? buildDashboard(sales, payments, expenses, products, debtors, days) : null),
     [sales, payments, expenses, products, debtors, days]
   )
+  const worth = useMemo(() => {
+    if (!sales || !payments || !expenses || !products || !debtors) return null
+    const inn = sales.filter((s) => !s.voidedAt).reduce((t, s) => t + partsOf(s).cash + partsOf(s).mpesa, 0) + payments.reduce((t, p) => t + p.amount, 0)
+    const out = expenses.reduce((t, e) => t + e.amount, 0)
+    const goods = products.filter((p) => !isService(p) && p.stock > 0)
+    const stock = goods.reduce((t, p) => t + p.stock * p.cost, 0)
+    return {
+      onHand: inn - out,
+      stock,
+      unpriced: goods.filter((p) => !(p.cost > 0)).length,
+      owed: debtors.reduce((t, x) => t + x.balance, 0)
+    }
+  }, [sales, payments, expenses, products, debtors])
   if (!d) return null
   if (!can('dashboard')) return <p className="muted pad">You don’t have access to the dashboard.</p>
 
@@ -68,6 +82,21 @@ export function Dashboard() {
 
   return (
     <div className="dash">
+      {worth && can('seeCost') && can('expenses') && (
+        <section className="worth" aria-label="What the business is worth">
+          <p className="kpi-label">What your business is worth</p>
+          <p className={'worth-num' + (worth.onHand + worth.stock + worth.owed < 0 ? ' bad' : '')}>KES {money(worth.onHand + worth.stock + worth.owed)}</p>
+          <dl>
+            <div><dt>Money on hand (cash and M-Pesa)</dt><dd>{money(worth.onHand)}</dd></div>
+            <div><dt>Stock you hold, at buying price</dt><dd>{money(worth.stock)}</dd></div>
+            <div><dt>Owed to you by customers</dt><dd>{money(worth.owed)}</dd></div>
+          </dl>
+          <p className="hint">
+            Counted from your records since you started using Hesabu. Money you had before, or took out for yourself, is not included.
+            {worth.unpriced > 0 ? ` ${worth.unpriced} item${worth.unpriced === 1 ? '' : 's'} in stock ${worth.unpriced === 1 ? 'has' : 'have'} no buying price and ${worth.unpriced === 1 ? 'is' : 'are'} left out.` : ''}
+          </p>
+        </section>
+      )}
       <div className="segment small" role="radiogroup" aria-label="Period">
         {PERIODS.map((p) => (
           <button key={p} role="radio" aria-checked={days === p} className={days === p ? 'on' : ''} onClick={() => setDays(p)}>

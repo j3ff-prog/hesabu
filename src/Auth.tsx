@@ -7,6 +7,7 @@ import { startSync, countPending, type SyncHandle } from './sync'
 import { setOwnerPhone } from './shop'
 import { AuthScreen, ShopPicker } from './SignIn'
 import { CreateShop } from './Welcome'
+import { Splash } from './Splash'
 
 export interface Who {
   id: string
@@ -104,6 +105,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let live = true
     void (async () => {
       const cached = readCache()
+      // Open straight away from what this phone already knows, and check with the server in the background.
+      if (cached && cached.shops.length > 0 && readActive()) {
+        setSession(cached.session)
+        choose(cached.shops)
+        try {
+          const live = await api.getSession()
+          if (!live) {
+            writeCache(null)
+            writeActive('')
+            window.location.reload()
+          }
+        } catch {
+          /* offline: keep going */
+        }
+        return
+      }
       let s: Session | null = null
       let list: ShopInfo[] | null = null
       try {
@@ -227,7 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [session, shop, role, shopId, shops, can, readOnly, shopState, signOut, switchShop, refresh]
   )
 
-  if (phase === 'loading') return <main className="welcome" aria-busy="true" />
+  if (phase === 'loading') return <Splash />
   if (phase === 'signedOut')
     return (
       <AuthScreen
