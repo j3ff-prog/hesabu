@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { DownloadIcon, LockIcon, Logo, PlusIcon } from './Icons'
+import { DownloadIcon, LockIcon, Logo } from './Icons'
 import { unsentCount, useAuth } from './Auth'
 import { ROLE_LABEL } from './rights'
 import { PAY_URL, PRICE, SUPPORT_EMAIL, shortDate, supportLink } from './format'
@@ -63,11 +63,6 @@ export function Ribbon({ shop, open }: { shop: string; open: (p: Panel) => void 
           <span className={'chip-state' + (!online || sync.state === 'offline' || sync.state === 'error' || sync.state === 'blocked' ? ' off' : '')}>{syncText(online, sync)}</span>
         </div>
         <div className="ribbon-actions">
-          {can('sell') && (
-            <Link to="/" className="btn amber ribbon-sell">
-              <PlusIcon /> New sale
-            </Link>
-          )}
           {data && (
             <button className="icon-btn ribbon-btn" onClick={() => open('data')} aria-label="Data: download and upload">
               <DownloadIcon />

@@ -2112,3 +2112,19 @@ a.menu-item { text-decoration: none; color: inherit; display: flex; }
 .worth dl { display: grid; gap: 0.35rem; margin: 0; }
 .worth dl div { display: flex; justify-content: space-between; gap: 1rem; }
 .worth dt { opacity: 0.75; } .worth dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.cart-bar.solo { padding: 8px; background: transparent; box-shadow: none; }
+.cart-bar.solo .btn { box-shadow: 0 10px 24px rgba(9, 63, 58, 0.3); min-height: 52px; font-size: 1.05rem; }
+.recent { list-style: none; margin: 0.5rem 0 0; padding: 0; }
+.recent li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.7rem 0; border-bottom: 1px solid var(--line); }
+.recent li > div { display: flex; flex-direction: column; min-width: 0; }
+.recent .line-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick { list-style: none; margin: 0.5rem 0 0; padding: 0; max-height: 42vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; }
+.pick li { display: flex; align-items: center; gap: 0.5rem; padding: 0.2rem 0.4rem 0.2rem 0; border-bottom: 1px solid var(--line); }
+.pick li:last-child { border-bottom: 0; }
+.pick li.on { background: color-mix(in srgb, var(--teal, #0E5A52) 8%, transparent); }
+.pick-main { flex: 1; display: flex; flex-direction: column; align-items: flex-start; text-align: left; background: none; border: 0; padding: 0.6rem 0.8rem; min-width: 0; font: inherit; color: inherit; cursor: pointer; }
+.pick-name { font-weight: 600; }
+.pick-add { background: none; border: 0; padding: 0.5rem; opacity: 0.55; }
+.sheet-foot { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 1rem -1rem -1rem; padding: 0.75rem 1rem; background: var(--teal-d); color: #fff; }
+.sheet-foot > div { display: flex; flex-direction: column; }

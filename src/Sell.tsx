@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { customerKey, db, recordSale, saveProduct, voidSale, type Method, type Product, isService } from './db'
-import { money, methodLabel, isoDate, addDays, startOfDay } from './format'
+import { money, methodLabel, isoDate, addDays, startOfDay, timeOf } from './format'
+import { payLabel } from './pay'
 import { Sheet } from './Sheet'
 import { MinusIcon, PlusIcon, SearchIcon } from './Icons'
 import { useToast } from './Toast'
@@ -11,33 +11,15 @@ import { useAuth } from './Auth'
 
 type Cart = Record<string, number>
 
+/** The Sell page: today's sales, and one big button to record a new one. */
 export function Sell() {
-  const products = useLiveQuery(() => db.products.orderBy('name').toArray(), [])
-  const [cart, setCart] = useState<Cart>({})
-  const [q, setQ] = useState('')
-  const [reviewing, setReviewing] = useState(false)
-  const [adding, setAdding] = useState(false)
-  const [extras, setExtras] = useState<Product[]>([]) // one-time items typed in during this sale
-  const toast = useToast()
   const { can, readOnly } = useAuth()
-
-  const add = (id: string) => setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 }))
-  const sub = (id: string) =>
-    setCart((c) => {
-      const next = { ...c }
-      if ((next[id] ?? 0) <= 1) delete next[id]
-      else next[id] -= 1
-      return next
-    })
-
-  const lines = useMemo(
-    () => [...(products ?? []), ...extras].filter((p) => cart[p.id]).map((p) => ({ p, qty: cart[p.id] })),
-    [products, extras, cart]
-  )
-  const count = lines.reduce((s, l) => s + l.qty, 0)
-  const total = lines.reduce((s, l) => s + l.qty * l.p.price, 0)
-
-  if (!products) return <main className="page" />
+  const toast = useToast()
+  const [open, setOpen] = useState(false)
+  const today = useLiveQuery(async () => {
+    const from = startOfDay()
+    return (await db.sales.where('createdAt').aboveOrEqual(from).toArray()).filter((s) => !s.voidedAt).sort((a, b) => b.createdAt - a.createdAt)
+  }, [])
 
   if (!can('sell')) {
     return (
@@ -51,91 +33,47 @@ export function Sell() {
     )
   }
 
-  if (products.length === 0) {
-    return (
-      <main className="page">
-        <h1>Sell</h1>
-        <div className="empty">
-          <p className="empty-title">Nothing to sell yet</p>
-          <p>Add what you sell with its price: goods you stock, or food and services you provide. Then you can record sales in a few taps.</p>
-          <Link className="btn primary" to="/stock">
-            Add items
-          </Link>
-        </div>
-      </main>
-    )
-  }
-
-  const needle = q.trim().toLowerCase()
-  const shown = needle ? products.filter((p) => p.name.toLowerCase().includes(needle)) : products
+  const total = (today ?? []).reduce((t, s) => t + s.total, 0)
 
   return (
-    <main className={'page' + (count > 0 ? ' has-bar' : '')}>
+    <main className="page has-bar">
       <h1>Sell</h1>
-      <label className="search">
-        <SearchIcon />
-        <input
-          type="search"
-          placeholder="Search products"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          aria-label="Search products"
-        />
-      </label>
+      <p className="muted">
+        Today: {(today ?? []).length} {(today ?? []).length === 1 ? 'sale' : 'sales'} · KES {money(total)}
+      </p>
 
-      <button className="btn outline add-item" onClick={() => setAdding(true)}>
-        <PlusIcon /> Add an item that is not on the list
-      </button>
-
-      {shown.length === 0 && <p className="muted pad">Nothing matches “{q}”.</p>}
-
-      <div className="tiles">
-        {shown.map((p) => (
-          <Tile key={p.id} p={p} qty={cart[p.id] ?? 0} onAdd={() => add(p.id)} onSub={() => sub(p.id)} />
-        ))}
-      </div>
-
-      {count > 0 && (
-        <div className="cart-bar">
-          <div>
-            <span className="cart-count">{count} {count === 1 ? 'item' : 'items'}</span>
-            <span className="cart-total">KES {money(total)}</span>
-          </div>
-          <button className="btn amber" onClick={() => setReviewing(true)}>
-            Review sale
-          </button>
+      {today && today.length === 0 && (
+        <div className="empty">
+          <p className="empty-title">No sales yet today</p>
+          <p>Tap “New sale” below to record your first one.</p>
         </div>
       )}
+      <ul className="recent">
+        {(today ?? []).slice(0, 12).map((s) => (
+          <li key={s.id}>
+            <div>
+              <span className="line-name">{s.lines.map((l) => (l.qty > 1 ? `${l.qty} × ${l.name}` : l.name)).join(', ')}</span>
+              <span className="muted">
+                {timeOf(s.createdAt)} · {payLabel(s)}
+                {s.customer ? ` · ${s.customer}` : ''}
+              </span>
+            </div>
+            <span className="line-total">{money(s.total)}</span>
+          </li>
+        ))}
+      </ul>
 
-      {adding && (
-        <AddItemSheet
-          name={q.trim()}
-          canSave={can('editStock')}
-          onClose={() => setAdding(false)}
-          onAdd={async (name, price, save) => {
-            let id: string
-            if (save) id = await saveProduct({ name, price, cost: 0, stock: 0, lowAt: 0, kind: 'service' })
-            else {
-              id = 'x:' + crypto.randomUUID()
-              setExtras((e) => [...e, { id, name, price, cost: 0, stock: 0, lowAt: 0, kind: 'service', createdAt: Date.now(), dirty: 0, rev: 0 }])
-            }
-            add(id)
-            setQ('')
-            setAdding(false)
-          }}
-        />
-      )}
+      <div className="cart-bar solo">
+        <button className="btn amber block" onClick={() => setOpen(true)}>
+          <PlusIcon /> New sale
+        </button>
+      </div>
 
-      {reviewing && (
-        <Checkout
-          lines={lines}
-          total={total}
-          onAdd={add}
-          onSub={sub}
-          onClose={() => setReviewing(false)}
+      {open && (
+        <NewSale
+          onClose={() => setOpen(false)}
           onDone={(id, t, who, credit) => {
-            setCart({})
-            setReviewing(false)
+            setOpen(false)
             toast.show({
               text: 'Sale recorded',
               sub: !who ? `KES ${money(t)}` : credit ? `KES ${money(t)} · added to ${who}’s credit` : `KES ${money(t)} · ${who}`,
@@ -148,34 +86,212 @@ export function Sell() {
   )
 }
 
-function Tile({ p, qty, onAdd, onSub }: { p: Product; qty: number; onAdd: () => void; onSub: () => void }) {
-  const service = isService(p)
-  const out = !service && p.stock <= 0
-  const low = !service && !out && p.stock <= p.lowAt
-  const inCart = qty > 0
+/** Pick what was sold: search, tap to add, change amounts, or add something that is not on the list. */
+function NewSale({ onClose, onDone }: { onClose: () => void; onDone: (id: string, total: number, buyer?: string, credit?: boolean) => void }) {
+  const products = useLiveQuery(() => db.products.orderBy('name').toArray(), [])
+  const { can } = useAuth()
+  const [cart, setCart] = useState<Cart>({})
+  const [extras, setExtras] = useState<Product[]>([]) // one-time items typed in during this sale
+  const [q, setQ] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [paying, setPaying] = useState(false)
+
+  const add = (id: string) => setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 }))
+  const sub = (id: string) =>
+    setCart((c) => {
+      const next = { ...c }
+      if ((next[id] ?? 0) <= 1) delete next[id]
+      else next[id] -= 1
+      return next
+    })
+
+  const all = useMemo(() => [...(products ?? []), ...extras], [products, extras])
+  const lines = useMemo(() => all.filter((p) => cart[p.id]).map((p) => ({ p, qty: cart[p.id] })), [all, cart])
+  const count = lines.reduce((s, l) => s + l.qty, 0)
+  const total = lines.reduce((s, l) => s + l.qty * l.p.price, 0)
+
+  const needle = q.trim().toLowerCase()
+  const shown = needle ? all.filter((p) => p.name.toLowerCase().includes(needle)) : all
+
+  if (paying)
+    return (
+      <Checkout
+        lines={lines}
+        total={total}
+        onAdd={add}
+        onSub={sub}
+        onClose={() => setPaying(false)}
+        onDone={onDone}
+      />
+    )
+
+  if (adding)
+    return (
+      <AddItemSheet
+        name={q.trim()}
+        canSave={can('editStock')}
+        canCost={can('seeCost')}
+        onClose={() => setAdding(false)}
+        onAdd={async (item, save) => {
+          let id: string
+          if (save) id = await saveProduct(item)
+          else {
+            id = 'x:' + crypto.randomUUID()
+            setExtras((e) => [...e, { ...item, id, createdAt: Date.now(), dirty: 0, rev: 0 }])
+          }
+          add(id)
+          setQ('')
+          setAdding(false)
+        }}
+      />
+    )
+
   return (
-    <div className={'tile' + (inCart ? ' in-cart' : '')}>
-      <button className="tile-main" onClick={onAdd} aria-label={`Add ${p.name}, KES ${p.price}`}>
-        <span className="tile-name">{p.name}</span>
-        <span className="tile-price">KES {money(p.price)}</span>
-        {!service && (
-          <span className={'tile-stock' + (out || low ? ' warn' : '')}>
-            {out ? 'Out of stock' : low ? `Only ${p.stock} left` : `${p.stock} in stock`}
-          </span>
-        )}
+    <Sheet title="New sale" onClose={onClose}>
+      <label className="search">
+        <SearchIcon />
+        <input type="search" placeholder="Search items" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search items" autoFocus />
+      </label>
+
+      {shown.length === 0 && <p className="muted pad">Nothing matches “{q}”.</p>}
+      <ul className="pick">
+        {shown.map((p) => {
+          const qty = cart[p.id] ?? 0
+          const service = isService(p)
+          const out = !service && p.stock <= 0
+          return (
+            <li key={p.id} className={qty > 0 ? 'on' : ''}>
+              <button className="pick-main" onClick={() => add(p.id)} aria-label={`Add ${p.name}, KES ${p.price}`}>
+                <span className="pick-name">{p.name}</span>
+                <span className="muted">
+                  KES {money(p.price)}
+                  {!service && !p.id.startsWith('x:') ? (out ? ' · out of stock' : ` · ${p.stock} in stock`) : ''}
+                </span>
+              </button>
+              {qty > 0 ? (
+                <div className="stepper">
+                  <button onClick={() => sub(p.id)} aria-label={`Remove one ${p.name}`}>
+                    <MinusIcon />
+                  </button>
+                  <span aria-live="polite">{qty}</span>
+                  <button onClick={() => add(p.id)} aria-label={`Add one more ${p.name}`}>
+                    <PlusIcon />
+                  </button>
+                </div>
+              ) : (
+                <button className="pick-add" onClick={() => add(p.id)} aria-hidden="true" tabIndex={-1}>
+                  <PlusIcon />
+                </button>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+
+      <button className="btn outline block gap-top" onClick={() => setAdding(true)}>
+        <PlusIcon /> Not on the list? Add an item
       </button>
-      {inCart && (
-        <div className="tile-step">
-          <button onClick={onSub} aria-label={`Remove one ${p.name}`}>
-            <MinusIcon />
+
+      <div className="sheet-foot">
+        <div>
+          <span className="cart-count">{count} {count === 1 ? 'item' : 'items'}</span>
+          <span className="cart-total">KES {money(total)}</span>
+        </div>
+        <button className="btn amber" disabled={count === 0} onClick={() => setPaying(true)}>
+          Continue
+        </button>
+      </div>
+    </Sheet>
+  )
+}
+
+type NewItem = Omit<Product, 'id' | 'createdAt' | 'dirty' | 'rev'>
+
+function AddItemSheet({
+  name: start,
+  canSave,
+  canCost,
+  onClose,
+  onAdd
+}: {
+  name: string
+  canSave: boolean
+  canCost: boolean
+  onClose: () => void
+  onAdd: (item: NewItem, save: boolean) => void
+}) {
+  const [name, setName] = useState(start)
+  const [kind, setKind] = useState<'goods' | 'service'>('service')
+  const [price, setPrice] = useState('')
+  const [cost, setCost] = useState('')
+  const [stock, setStock] = useState('')
+  const [save, setSave] = useState(canSave)
+  const ok = name.trim().length >= 2 && Number(price) > 0
+
+  return (
+    <Sheet title="Add an item" onClose={onClose}>
+      <fieldset className="field">
+        <legend>What kind of item?</legend>
+        <div className="segment" role="radiogroup">
+          <button role="radio" aria-checked={kind === 'goods'} className={kind === 'goods' ? 'on' : ''} onClick={() => setKind('goods')}>
+            Goods
           </button>
-          <span className="tile-qty" aria-live="polite">{qty}</span>
-          <button onClick={onAdd} aria-label={`Add one more ${p.name}`}>
-            <PlusIcon />
+          <button role="radio" aria-checked={kind === 'service'} className={kind === 'service' ? 'on' : ''} onClick={() => setKind('service')}>
+            Food or service
           </button>
         </div>
+        <p className="hint spaced">{kind === 'goods' ? 'Something you buy and resell, like sugar or a phone charger.' : 'Something you make or do, like a cup of porridge, a haircut or delivery.'}</p>
+      </fieldset>
+      <label className="field">
+        <span>Name</span>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Delivery, extra cup" autoFocus />
+      </label>
+      <label className="field">
+        <span>Selling price (KES)</span>
+        <input type="number" inputMode="numeric" min="1" value={price} onChange={(e) => setPrice(e.target.value)} />
+      </label>
+      {kind === 'goods' && save && (
+        <div className="two">
+          {canCost && (
+            <label className="field">
+              <span>Buying price (optional)</span>
+              <input type="number" inputMode="numeric" min="0" value={cost} onChange={(e) => setCost(e.target.value)} />
+            </label>
+          )}
+          <label className="field">
+            <span>In stock (optional)</span>
+            <input type="number" inputMode="numeric" min="0" value={stock} onChange={(e) => setStock(e.target.value)} />
+          </label>
+        </div>
       )}
-    </div>
+      {canSave ? (
+        <label className="check">
+          <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
+          <span>Keep it on my list for next time</span>
+        </label>
+      ) : (
+        <p className="hint">This sells it once. The owner can add it to the list.</p>
+      )}
+      <button
+        className="btn primary block"
+        disabled={!ok}
+        onClick={() =>
+          onAdd(
+            {
+              name: name.trim(),
+              price: Number(price),
+              cost: kind === 'goods' && save ? Number(cost) || 0 : 0,
+              stock: kind === 'goods' && save ? Number(stock) || 0 : 0,
+              lowAt: 0,
+              kind
+            },
+            save
+          )
+        }
+      >
+        Add to sale
+      </button>
+    </Sheet>
   )
 }
 
@@ -355,31 +471,3 @@ function useKnownBuyers(): { key: string; name: string }[] {
   }, [recent])
 }
 
-function AddItemSheet({ name: start, canSave, onClose, onAdd }: { name: string; canSave: boolean; onClose: () => void; onAdd: (name: string, price: number, save: boolean) => void }) {
-  const [name, setName] = useState(start)
-  const [price, setPrice] = useState('')
-  const [save, setSave] = useState(canSave)
-  const ok = name.trim().length >= 2 && Number(price) > 0
-  return (
-    <Sheet title="Add an item to this sale" onClose={onClose}>
-      <label className="field">
-        <span>What is it?</span>
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Delivery, extra cup" autoFocus />
-      </label>
-      <label className="field">
-        <span>Price (KES)</span>
-        <input type="number" inputMode="numeric" min="1" value={price} onChange={(e) => setPrice(e.target.value)} />
-      </label>
-      {canSave && (
-        <label className="check">
-          <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
-          <span>Keep it on my list for next time</span>
-        </label>
-      )}
-      {!canSave && <p className="hint">This sells it once. The owner can add it to the list.</p>}
-      <button className="btn primary block" disabled={!ok} onClick={() => onAdd(name.trim(), Number(price), save)}>
-        Add to sale
-      </button>
-    </Sheet>
-  )
-}
