@@ -1,5 +1,5 @@
 // Edge Function: Paystack tells us a payment succeeded; we extend that shop's subscription.
-// Deploy with "Verify JWT" switched OFF (Paystack does not send a Tallify login).
+// Deploy with "Verify JWT" switched OFF (Paystack does not send a Tallyfy login).
 // Secret needed: PAYSTACK_SECRET_KEY (Edge Functions > Secrets). Webhook URL goes into Paystack settings.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 

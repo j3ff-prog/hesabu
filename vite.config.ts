@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Tallify',
-        short_name: 'Tallify',
+        name: 'Tallyfy',
+        short_name: 'Tallyfy',
         description: 'Record sales and track stock in your shop, even without internet.',
         theme_color: '#0E5A52',
         background_color: '#F6F2EA',

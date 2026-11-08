@@ -18,7 +18,7 @@ import { TallyDraw } from './Tally'
 import { ToastContext, type ToastData } from './Toast'
 
 export default function App() {
-  // The admin page is for the Tallify owner, on any device: it skips the shop's own sign-in.
+  // The admin page is for the Tallyfy owner, on any device: it skips the shop's own sign-in.
   if (window.location.hash.startsWith('#/admin')) {
     return (
       <HashRouter>
@@ -114,7 +114,7 @@ function Shell() {
             <nav className="tabs" aria-label="Main">
               <div className="brand" aria-hidden="true">
                 <Logo size={34} />
-                <span>tallify</span>
+                <span>tallyfy</span>
               </div>
               {can('sell') && (
                 <NavLink to="/" end>

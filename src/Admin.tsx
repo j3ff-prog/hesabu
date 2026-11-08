@@ -21,7 +21,7 @@ const ago = (iso: string | null): string => {
 
 type Filter = 'all' | 'active7' | 'quiet' | 'trial' | 'paying' | 'suspended'
 
-/** Your view of every shop that uses Tallify. Open it at  #/admin  and sign in with your own phone number and PIN. */
+/** Your view of every shop that uses Tallyfy. Open it at  #/admin  and sign in with your own phone number and PIN. */
 export function Admin() {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
   const [shops, setShops] = useState<ShopRow[] | null>(null)
@@ -39,7 +39,7 @@ export function Admin() {
     try {
       setShops(await api.adminShops())
     } catch (e) {
-      setErr(e instanceof ApiError && e.code === 'network' ? 'No internet.' : 'This account is not a Tallify admin. Ask for your number to be added in Supabase.')
+      setErr(e instanceof ApiError && e.code === 'network' ? 'No internet.' : 'This account is not a Tallyfy admin. Ask for your number to be added in Supabase.')
     }
   }, [])
 
@@ -84,14 +84,14 @@ export function Admin() {
   return (
     <main className="page admin">
       <div className="admin-head">
-        <h1>Tallify admin</h1>
+        <h1>Tallyfy admin</h1>
         <div className="admin-actions">
           <button className="btn outline" onClick={() => void load()}>Refresh</button>
           <button
             className="btn outline"
             onClick={() =>
               downloadFile(
-                `tallify-shops-${isoDate(Date.now())}.csv`,
+                `tallyfy-shops-${isoDate(Date.now())}.csv`,
                 toCsv([
                   ['Shop', 'Owner phone', 'Status', 'Plan', 'Trial ends', 'Paid until', 'Started', 'Last sale', 'Products', 'Staff', 'Sales (30 days)', 'Revenue (30 days)', 'Note'],
                   ...(shops ?? []).map((s) => [s.name, s.owner_phone ? showPhone(s.owner_phone) : '', s.status, s.plan, isoDate(t(s.trial_ends_at) ?? 0), s.paid_until ? isoDate(t(s.paid_until) ?? 0) : '', isoDate(t(s.created_at) ?? 0), s.last_sale ? isoDate(t(s.last_sale) ?? 0) : '', s.products, s.staff, s.sales30, s.revenue30, s.admin_note])
@@ -113,7 +113,7 @@ export function Admin() {
             <div className="kpi"><p className="kpi-label">Shops</p><p className="kpi-num">{stats.total}</p><p className="kpi-sub">{stats.newWeek} new this week</p></div>
             <div className="kpi"><p className="kpi-label">Used this week</p><p className="kpi-num">{stats.active7}</p><p className="kpi-sub">{stats.total ? Math.round((stats.active7 / stats.total) * 100) : 0}% of all shops</p></div>
             <div className="kpi"><p className="kpi-label">Paying</p><p className="kpi-num">{stats.paying}</p><p className="kpi-sub">{stats.total - stats.paying} on trial or stopped</p></div>
-            <div className="kpi"><p className="kpi-label">Sales through Tallify</p><p className="kpi-num">KES {compact(stats.revenue)}</p><p className="kpi-sub">Last 30 days, all shops</p></div>
+            <div className="kpi"><p className="kpi-label">Sales through Tallyfy</p><p className="kpi-num">KES {compact(stats.revenue)}</p><p className="kpi-sub">Last 30 days, all shops</p></div>
           </div>
 
           <div className="chips tight" role="radiogroup" aria-label="Filter">
@@ -212,7 +212,7 @@ function ShopSheet({ shop, onClose, onSaved }: { shop: ShopRow; onClose: () => v
       </dl>
 
       {wa && (
-        <button className="btn outline block" onClick={() => openWhatsApp(waLink(wa, `Hello, this is Tallify. How is ${shop.name} getting on with the app?`))}>
+        <button className="btn outline block" onClick={() => openWhatsApp(waLink(wa, `Hello, this is Tallyfy. How is ${shop.name} getting on with the app?`))}>
           Message on WhatsApp
         </button>
       )}
@@ -245,7 +245,7 @@ function ShopSheet({ shop, onClose, onSaved }: { shop: ShopRow; onClose: () => v
           <p>New PIN for <strong>{showPhone(newPin.phone)}</strong>:</p>
           <p className="temp-pin">{newPin.pin}</p>
           {toWaNumber(newPin.phone) && (
-            <button className="btn amber block" onClick={() => openWhatsApp(waLink(toWaNumber(newPin.phone) ?? '', `Hello, your Tallify PIN has been reset. Sign in with your phone number and this PIN: ${newPin.pin}. Please change it from the menu after signing in.`))}>Send on WhatsApp</button>
+            <button className="btn amber block" onClick={() => openWhatsApp(waLink(toWaNumber(newPin.phone) ?? '', `Hello, your Tallyfy PIN has been reset. Sign in with your phone number and this PIN: ${newPin.pin}. Please change it from the menu after signing in.`))}>Send on WhatsApp</button>
           )}
         </>
       ) : (

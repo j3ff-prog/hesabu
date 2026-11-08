@@ -1,4 +1,4 @@
-# Tallify setup (Supabase version)
+# Tallyfy setup (Supabase version)
 
 ## 0. Moving from the old test version (once)
 SQL Editor > run `supabase/cleanup-test-data.sql`. This deletes the old test account and shop. Then clear the site data on your phone (or sign out), open the app and make a new account. After that, do step 4 again to make yourself admin.
@@ -24,7 +24,7 @@ git add . && git commit -m "Supabase" && git push
 ```
 Cloudflare rebuilds by itself. No environment variables are needed (the project address and public key are built in).
 
-## 4. You as Tallify admin
+## 4. You as Tallyfy admin
 Sign up in the app with your own number once. Then SQL Editor:
 ```
 insert into platform_admins (user_id)

@@ -46,7 +46,7 @@ export function AuthScreen({ onDone }: { onDone: (s: Session, shops: ShopInfo[])
   return (
     <main className="welcome signin">
       <img src="icon.svg" alt="" width="64" height="64" className="welcome-mark" />
-      <h1 className="welcome-title">Tallify</h1>
+      <h1 className="welcome-title">Tallyfy</h1>
       <p className="welcome-sub">{mode === 'in' ? 'Sign in with your phone number and PIN.' : 'Make your account. Your first month is free.'}</p>
       <form
         onSubmit={(e) => {

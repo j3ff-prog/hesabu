@@ -99,7 +99,7 @@ export const LockIcon = () => (
   </Svg>
 )
 
-/** The Tallify mark: four tally strokes with the amber slash. */
+/** The Tallyfy mark: four tally strokes with the amber slash. */
 export const Logo = ({ size = 32 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 512 512" aria-hidden="true" className="logo-mark">
     <rect width="512" height="512" rx="116" fill="#0E5A52" />

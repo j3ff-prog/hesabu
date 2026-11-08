@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     return reply({ error: 'Bad request' }, 400)
   }
 
-  // The Tallify admin can set a new PIN for a shop's owner who has lost theirs.
+  // The Tallyfy admin can set a new PIN for a shop's owner who has lost theirs.
   if (b.action === 'admin-reset') {
     const { data: isAdmin } = await admin.from('platform_admins').select('user_id').eq('user_id', who.user.id).maybeSingle()
     if (!isAdmin) return reply({ error: 'Not allowed' }, 403)
@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     if (!m || m.role === 'owner') return reply({ error: 'Person not found' }, 404)
     // A person who belongs to several shops has one login: only reset the PIN if this is the only shop they are in.
     const { count } = await admin.from('members').select('*', { count: 'exact', head: true }).eq('user_id', m.user_id)
-    if ((count ?? 0) > 1) return reply({ error: 'This person uses Tallify in more than one shop, so they must change their own PIN.' }, 409)
+    if ((count ?? 0) > 1) return reply({ error: 'This person uses Tallyfy in more than one shop, so they must change their own PIN.' }, 409)
     const { error } = await admin.auth.admin.updateUserById(m.user_id, { password: password(pin) })
     return error ? reply({ error: 'Could not reset the PIN' }, 500) : reply({ ok: true })
   }
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
   if (created.data?.user) {
     userId = created.data.user.id
   } else {
-    // Already has a Tallify login (for example the developer joining as staff). Keep their own PIN.
+    // Already has a Tallyfy login (for example the developer joining as staff). Keep their own PIN.
     const { data: id } = await admin.rpc('user_by_phone', { p_phone: phone })
     if (!id) return reply({ error: 'Could not create the login' }, 500)
     userId = id as string

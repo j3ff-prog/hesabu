@@ -169,7 +169,7 @@ function ProductSheet({ product, onClose }: { product: Product | null; onClose: 
         <p className="hint spaced">
           {service
             ? 'Cooked food, drinks you make, haircuts and the like. No count to keep. Record what you spend on ingredients under Expenses.'
-            : 'Things you buy and resell. Tallify counts them and warns you when they run low.'}
+            : 'Things you buy and resell. Tallyfy counts them and warns you when they run low.'}
         </p>
       </fieldset>
       <label className="field">
@@ -186,7 +186,7 @@ function ProductSheet({ product, onClose }: { product: Product | null; onClose: 
             <span>Buying price (KES)</span>
             <input type="text" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="Optional" />
           </label>
-          <p className="hint">The buying price lets Tallify work out your profit. Without it, this item is left out of profit.</p>
+          <p className="hint">The buying price lets Tallyfy work out your profit. Without it, this item is left out of profit.</p>
           <div className="two">
             <label className="field">
               <span>In stock now</span>

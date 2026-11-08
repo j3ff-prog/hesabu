@@ -85,7 +85,7 @@ export function summaryText(shop: string, day: number, f: DayFigures, closing: C
   if (low.length > 0) {
     lines.push('', `Running low: ${low.slice(0, 6).map((p) => `${p.name} (${Math.max(0, p.stock)})`).join(', ')}`)
   }
-  lines.push('', 'Sent from Tallify')
+  lines.push('', 'Sent from Tallyfy')
   return lines.join('\n')
 }
 

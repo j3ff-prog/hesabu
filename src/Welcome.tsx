@@ -45,7 +45,7 @@ export function CreateShop({ phone: login, onDone, onSignOut }: { phone: string;
   return (
     <main className="welcome">
       <img src="icon.svg" alt="" width="64" height="64" className="welcome-mark" />
-      <h1 className="welcome-title">Tallify</h1>
+      <h1 className="welcome-title">Tallyfy</h1>
       <p className="welcome-sub">Know what’s happening in your shop, even when you’re not there.</p>
 
       <label className="field">
