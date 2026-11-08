@@ -144,10 +144,20 @@ export class TallifyDB extends Dexie {
 
 /** Each shop has its own database on the device, so someone who belongs to two shops never mixes them up. */
 export let db: TallifyDB = new TallifyDB('tallify-none')
+/** If the browser closes the database behind our back (another tab upgrading it, memory pressure), open it again. */
+function keepOpen(d: TallifyDB): void {
+  d.on('close', () => {
+    setTimeout(() => {
+      if (db === d && !d.isOpen()) void d.open().catch(() => undefined)
+    }, 300)
+  })
+}
+keepOpen(db)
 export function openShopDb(shopId: string): TallifyDB {
   if (db.name !== `tallify-${shopId}`) {
     db.close()
     db = new TallifyDB(`tallify-${shopId}`)
+    keepOpen(db)
   }
   return db
 }

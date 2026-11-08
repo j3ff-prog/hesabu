@@ -218,3 +218,57 @@ export function AdminSupport({ names, onClose }: { names: Record<string, string>
     </Sheet>
   )
 }
+
+const ASKED_KEY = 'tallify.notifyAsked'
+
+/** Shown once after signing in, only if notifications are off. "Not now" is remembered. */
+export function NotifyAsk() {
+  const { shopId } = useAuth()
+  const [show, setShow] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    let asked = false
+    try {
+      asked = localStorage.getItem(ASKED_KEY) === '1'
+    } catch {
+      /* ignore */
+    }
+    if (asked) return
+    void pushState().then((s) => {
+      if (s === 'off') setShow(true)
+    })
+  }, [])
+  const remember = () => {
+    try {
+      localStorage.setItem(ASKED_KEY, '1')
+    } catch {
+      /* ignore */
+    }
+  }
+  if (!show) return null
+  const no = () => {
+    remember()
+    setShow(false)
+  }
+  const yes = async () => {
+    setBusy(true)
+    setErr('')
+    try {
+      await enablePush(shopId)
+      remember()
+      setShow(false)
+    } catch (e) {
+      setErr(errText(e))
+      setBusy(false)
+    }
+  }
+  return (
+    <Sheet title="Turn on notifications?" onClose={no}>
+      <p>Get a notification on this phone when someone on your team records a sale, and when Tallyfy support replies. You can change this any time in the menu.</p>
+      <button className="btn primary block" disabled={busy} onClick={yes}>Turn notifications on</button>
+      <button className="btn outline block" disabled={busy} onClick={no}>Not now</button>
+      {err && <p className="hint warn-text" role="alert">{err}</p>}
+    </Sheet>
+  )
+}

@@ -5,9 +5,17 @@ import type { Role } from './db'
 export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || 'https://rkvjhveblhiprvyttxus.supabase.co'
 export const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_KEY as string | undefined) || 'sb_publishable_J68GDYMBQ0RI-7zS4kHn5A_0MW500RO'
 
+/** A request that never answers (phone on mobile data with no bundle) must fail, not hang forever. */
+const timedFetch: typeof fetch = (input, init) => {
+  const ctl = new AbortController()
+  const t = setTimeout(() => ctl.abort(), 25_000)
+  init?.signal?.addEventListener('abort', () => ctl.abort())
+  return fetch(input, { ...init, signal: ctl.signal }).finally(() => clearTimeout(t))
+}
+
 let client: SupabaseClient | null = null
 const sb = (): SupabaseClient => {
-  if (!client) client = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } })
+  if (!client) client = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }, global: { fetch: timedFetch } })
   return client
 }
 

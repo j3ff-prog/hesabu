@@ -69,6 +69,10 @@ export function Ribbon({ shop, open }: { shop: string; open: (p: Panel) => void 
               <span className="ribbon-label">Data</span>
             </button>
           )}
+          <button className="icon-btn ribbon-btn" onClick={() => open('help')} aria-label="Help and support">
+            <span aria-hidden="true" style={{ fontWeight: 700, fontSize: 18, lineHeight: 1 }}>?</span>
+            <span className="ribbon-label">Help</span>
+          </button>
           <button className="avatar-btn" onClick={() => open('menu')} aria-label={`Menu, signed in as ${me.name}`}>
             <span className="avatar">{me.name.trim()[0]?.toUpperCase() ?? '?'}</span>
             <span className="avatar-role">{ROLE_LABEL[me.role]}</span>

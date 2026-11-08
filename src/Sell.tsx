@@ -335,13 +335,33 @@ function Checkout({
     // Reuse the spelling we already have for this person, so "wanjiku" and "Wanjiku" stay one customer.
     const typed = customer.trim()
     const who = typed ? known.find((k) => k.key === customerKey(typed))?.name ?? typed : undefined
-    const { id, total: t } = await recordSale(
-      lines.map(({ p, qty }) => ({ productId: p.id.startsWith('x:') ? '' : p.id, name: p.name, qty, price: p.price, cost: p.cost, ...(isService(p) ? { service: true } : {}) })),
-      { cash: cashAmt, mpesa: mpesaAmt, credit: creditAmt },
-      who,
-      isCredit ? new Date(due + 'T23:59:59').getTime() : undefined
-    )
-    onDone(id, t, who, isCredit)
+    // If the phone's storage ever stalls, never leave the button greyed out: close and let the list show the truth.
+    let finished = false
+    const watchdog = window.setTimeout(() => {
+      if (finished) return
+      finished = true
+      setSaving(false)
+      onClose()
+    }, 6000)
+    try {
+      const { id, total: t } = await recordSale(
+        lines.map(({ p, qty }) => ({ productId: p.id.startsWith('x:') ? '' : p.id, name: p.name, qty, price: p.price, cost: p.cost, ...(isService(p) ? { service: true } : {}) })),
+        { cash: cashAmt, mpesa: mpesaAmt, credit: creditAmt },
+        who,
+        isCredit ? new Date(due + 'T23:59:59').getTime() : undefined
+      )
+      if (!finished) {
+        finished = true
+        onDone(id, t, who, isCredit)
+      }
+    } catch {
+      if (!finished) {
+        finished = true
+        setSaving(false)
+      }
+    } finally {
+      window.clearTimeout(watchdog)
+    }
   }
 
   const typedKey = customerKey(customer)

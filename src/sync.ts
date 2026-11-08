@@ -336,8 +336,15 @@ export function startSync(api: Api, shopId: string, role: Role, onDenied?: () =>
     running = true
     set({ state: 'syncing' })
     try {
-      await push(api, shopId, role)
-      await pullAll(api, shopId, role)
+      let timeout: number | undefined
+      const limit = new Promise<never>((_, no) => {
+        timeout = window.setTimeout(() => no(new ApiError('network', 'Sync took too long')), 45_000)
+      })
+      try {
+        await Promise.race([(async () => { await push(api, shopId, role); await pullAll(api, shopId, role) })(), limit])
+      } finally {
+        window.clearTimeout(timeout)
+      }
       set({ state: 'idle', error: '', last: Date.now(), pending: await countPending() })
     } catch (e) {
       const pending = await countPending()
