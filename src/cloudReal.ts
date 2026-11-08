@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { ApiError, PHONE_EMAIL, PIN_PASSWORD, type AdminShop, type Api, type Member, type Row, type Session, type ShopInfo, type ShopState } from './cloudApi'
+import { ApiError, PHONE_EMAIL, PIN_PASSWORD, type SupportMsg, type AdminShop, type Api, type Member, type Row, type Session, type ShopInfo, type ShopState } from './cloudApi'
 import type { Role } from './db'
 
 export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || 'https://rkvjhveblhiprvyttxus.supabase.co'
@@ -27,6 +27,9 @@ const ok = <T>(r: { data: T | null; error: { message?: string } | null }): T => 
 
 const phoneOf = (email: string | undefined): string => (email ?? '').replace('@tallify.app', '')
 const session = (u: { id: string; email?: string }): Session => ({ userId: u.id, phone: phoneOf(u.email) })
+
+const toMsgs = (rows: Row[] | null): SupportMsg[] =>
+  (rows ?? []).map((m) => ({ id: m.id as string, shopId: m.shop_id as string, fromAdmin: !!m.from_admin, sender: (m.sender as string) ?? '', body: m.body as string, createdAt: m.created_at as string }))
 
 export const realApi: Api = {
   async getSession() {
@@ -137,6 +140,28 @@ export const realApi: Api = {
   },
   async softDelete(table, id) {
     ok(await sb().from(table).update({ deleted_at: new Date().toISOString() }).eq('id', id).select('id'))
+  },
+
+  async savePush(shopId, sub) {
+    const uid = (await sb().auth.getUser()).data.user?.id
+    ok(await sb().from('push_subscriptions').upsert({ endpoint: sub.endpoint, user_id: uid, shop_id: shopId, p256dh: sub.p256dh, auth: sub.auth }, { onConflict: 'endpoint' }))
+  },
+  async removePush(endpoint) {
+    ok(await sb().from('push_subscriptions').delete().eq('endpoint', endpoint))
+  },
+  async supportMessages(shopId) {
+    return toMsgs(ok(await sb().from('support_messages').select('*').eq('shop_id', shopId).order('created_at', { ascending: true }).limit(200)))
+  },
+  async sendSupport(shopId, sender, body) {
+    const uid = (await sb().auth.getUser()).data.user?.id
+    ok(await sb().from('support_messages').insert({ shop_id: shopId, user_id: uid, sender, body }))
+  },
+  async adminSupport() {
+    return toMsgs(ok(await sb().from('support_messages').select('*').order('created_at', { ascending: true }).limit(1000)))
+  },
+  async adminReply(shopId, body) {
+    const uid = (await sb().auth.getUser()).data.user?.id
+    ok(await sb().from('support_messages').insert({ shop_id: shopId, user_id: uid, from_admin: true, sender: 'Tallyfy support', body }))
   },
 
   async adminShops() {

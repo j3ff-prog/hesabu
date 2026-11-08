@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from './api'
 import { ApiError, type AdminShop, type Session } from './cloudApi'
 import { tempPin } from './pin'
+import { AdminSupport } from './Support'
 import { AuthScreen } from './SignIn'
 import { compact, isoDate, money, showPhone, toWaNumber } from './format'
 import { downloadFile, toCsv } from './csv'
@@ -29,6 +30,7 @@ export function Admin() {
   const [filter, setFilter] = useState<Filter>('all')
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<ShopRow | null>(null)
+  const [support, setSupport] = useState(false)
 
   useEffect(() => {
     api.getSession().then(setSession, () => setSession(null))
@@ -85,6 +87,7 @@ export function Admin() {
     <main className="page admin">
       <div className="admin-head">
         <h1>Tallyfy admin</h1>
+        <button className="btn outline" onClick={() => setSupport(true)}>Support messages</button>
         <div className="admin-actions">
           <button className="btn outline" onClick={() => void load()}>Refresh</button>
           <button
@@ -149,6 +152,7 @@ export function Admin() {
         </>
       )}
 
+      {support && <AdminSupport names={Object.fromEntries((shops ?? []).map((s) => [s.id, s.name]))} onClose={() => setSupport(false)} />}
       {open && (
         <ShopSheet
           shop={open}

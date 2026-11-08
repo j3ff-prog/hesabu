@@ -35,6 +35,14 @@ select id from auth.users where email = '2547XXXXXXXX@tallify.app';
 ## 5. Your mother
 She opens the site on her phone, taps "Make an account", names the shop (choose "Food and drinks I make"), and installs it (browser menu > Add to Home screen). In Menu > Team she adds you as Manager with your number.
 
+## 6. Notifications and support chat
+1. SQL Editor: run `supabase/migrations/0006_push_support.sql`.
+2. On your computer, in any folder, run `npx web-push generate-vapid-keys`. It prints a Public Key and a Private Key.
+3. Supabase > Edge Functions > Secrets: add `VAPID_PUBLIC_KEY` (the public one) and `VAPID_PRIVATE_KEY` (the private one). Never paste the private key anywhere else.
+4. Edge Functions > Deploy a new function > Via Editor. Name it `notify`, paste `supabase/functions/notify/index.ts`, switch "Verify JWT" OFF, Deploy.
+5. Push the app (the service worker file `public/push-sw.js` is included).
+6. In the app: Menu > Notifications > Turn notifications on. As admin, open `#/admin` > Support messages > turn notifications on to hear when a shop writes to you.
+
 ## Tests
 `node tests/fakeserver.mjs` and build with `VITE_FAKE_CLOUD=http://localhost:8799` to run the two-phone test.
 

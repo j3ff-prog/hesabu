@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom'
 import { DownloadIcon, LockIcon, Logo } from './Icons'
 import { unsentCount, useAuth } from './Auth'
 import { ROLE_LABEL } from './rights'
-import { PAY_URL, PRICE, SUPPORT_EMAIL, shortDate, supportLink } from './format'
+import { PAY_URL, PRICE, shortDate } from './format'
 import { Sheet } from './Sheet'
 import { useSyncStatus } from './sync'
 
-export type Panel = null | 'menu' | 'settings' | 'data' | 'team' | 'pin'
+export type Panel = null | 'menu' | 'settings' | 'data' | 'team' | 'pin' | 'help' | 'notify'
 
 const useOnline = (): boolean => {
   const [on, setOn] = useState(navigator.onLine)
@@ -119,12 +119,8 @@ export function MenuSheet({ shop, open, onClose }: { shop: string; open: (p: Pan
         {me.role === 'owner' && item('Subscription', subText(shopState), () => window.open(PAY_URL, '_blank', 'noopener'))}
         {item('Change my PIN', 'Choose a new PIN', () => open('pin'))}
         {shops.length > 1 && shops.filter((s) => s.id !== shopId).map((s) => item('Switch to ' + s.name, ROLE_LABEL[s.role], () => switchShop(s.id)))}
-        <li>
-          <a className="menu-item" href={supportLink(`Tallyfy help: ${shop}`)}>
-            <span>Help</span>
-            <span className="muted">{SUPPORT_EMAIL}</span>
-          </a>
-        </li>
+        {can('settings') && item('Notifications', 'Sales by your team, support replies', () => open('notify'))}
+        {item('Help and support', 'Chat with us, quick answers', () => open('help'))}
       </ul>
       {sure !== null && (
         <p className="hint warn-text" role="alert">

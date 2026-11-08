@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 const users = new Map() // phone -> {id, pin}
 const byId = new Map()
 const shops = new Map()
+const support = []
 const members = [] // {shop_id,user_id,role,name,phone,active}
 const T = { products: new Map(), product_costs: new Map(), sales: new Map(), sale_lines: new Map(), sale_line_costs: new Map(), customers: new Map(), payments: new Map(), expenses: new Map(), closings: new Map() }
 let tick = 0
@@ -107,6 +108,12 @@ const rpc = {
     if (!r.deleted_at) { r.deleted_at = new Date().toISOString(); r.updated_at = stamp(); if (table === 'expenses' && r.category === 'New stock') for (const i of r.items ?? []) stock(i.productId, r.shop_id, -Number(i.qty)) }
     return null
   },
+  savePush: () => null,
+  removePush: () => null,
+  supportMessages: (u, uid, shop) => { if (!money(roleOf(shop, uid))) err('denied', 'Not allowed'); return support.filter((m) => m.shopId === shop) },
+  sendSupport: (u, uid, shop, sender, body) => { if (!money(roleOf(shop, uid))) err('denied', 'Not allowed'); support.push({ id: randomUUID(), shopId: shop, fromAdmin: false, sender, body, createdAt: stamp() }); return null },
+  adminSupport: (u) => { if (u.phone !== '254700000000') err('denied', 'Not allowed'); return support },
+  adminReply: (u, uid, shop, body) => { if (u.phone !== '254700000000') err('denied', 'Not allowed'); support.push({ id: randomUUID(), shopId: shop, fromAdmin: true, sender: 'Tallyfy support', body, createdAt: stamp() }); return null },
   adminShops: () => err('denied', 'not allowed'),
   adminSetShop: () => err('denied', 'not allowed')
 }

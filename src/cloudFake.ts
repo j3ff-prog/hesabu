@@ -35,6 +35,6 @@ async function call(method: string, args: unknown[]): Promise<unknown> {
 
 const names = [
   'getSession', 'signUp', 'signIn', 'signOut', 'changePin', 'myShops', 'createShop', 'updateShop', 'shopState', 'members', 'addStaff',
-  'resetPin', 'setMember', 'pull', 'pullLines', 'upsert', 'pushSale', 'voidSale', 'softDelete', 'adminShops', 'adminResetOwner', 'adminSetShop'
+  'resetPin', 'setMember', 'pull', 'pullLines', 'upsert', 'pushSale', 'voidSale', 'softDelete', 'savePush', 'removePush', 'supportMessages', 'sendSupport', 'adminSupport', 'adminReply', 'adminShops', 'adminResetOwner', 'adminSetShop'
 ] as const
 export const fakeApi = Object.fromEntries(names.map((n) => [n, (...a: unknown[]) => call(n, a)])) as unknown as Api

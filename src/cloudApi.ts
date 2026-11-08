@@ -54,6 +54,21 @@ export interface AdminShop {
   last_sale: string | null
 }
 
+export interface SupportMsg {
+  id: string
+  shopId: string
+  fromAdmin: boolean
+  sender: string
+  body: string
+  createdAt: string
+}
+
+export interface PushSub {
+  endpoint: string
+  p256dh: string
+  auth: string
+}
+
 export type SyncTable = 'products' | 'product_costs' | 'sales' | 'payments' | 'customers' | 'expenses' | 'closings'
 export type Row = Record<string, unknown>
 
@@ -82,6 +97,13 @@ export interface Api {
   pushSale(sale: Row, lines: Row[]): Promise<void>
   voidSale(id: string, at: string): Promise<void>
   softDelete(table: 'products' | 'payments' | 'expenses', id: string): Promise<void>
+
+  savePush(shopId: string | null, sub: PushSub): Promise<void>
+  removePush(endpoint: string): Promise<void>
+  supportMessages(shopId: string): Promise<SupportMsg[]>
+  sendSupport(shopId: string, sender: string, body: string): Promise<void>
+  adminSupport(): Promise<SupportMsg[]>
+  adminReply(shopId: string, body: string): Promise<void>
 
   adminShops(): Promise<AdminShop[]>
   adminResetOwner(shopId: string, pin: string): Promise<{ phone: string }>

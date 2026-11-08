@@ -9,6 +9,7 @@ import { Admin } from './Admin'
 import { AuthProvider, useAuth } from './Auth'
 import { ChangePinSheet } from './SignIn'
 import { Ribbon, MenuSheet, type Panel } from './Ribbon'
+import { HelpSheet, NotifySheet } from './Support'
 import { TeamSheet } from './Team'
 import { DataSheet } from './DataSheet'
 import { SettingsSheet } from './Settings'
@@ -147,6 +148,8 @@ function Shell() {
             </nav>
           </div>
 
+          {panel === 'help' && <HelpSheet onClose={close} />}
+          {panel === 'notify' && <NotifySheet onClose={close} />}
           {panel === 'menu' && <MenuSheet shop={shop} open={setPanel} onClose={close} />}
           {panel === 'data' && <DataSheet onClose={close} />}
           {panel === 'team' && <TeamSheet onClose={close} />}
