@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { ApiError, type Api, type Row, type SyncTable } from './cloudApi'
-import { db, type Closing, type Customer, type Expense, type Payment, type Product, type Role, type Sale } from './db'
+import { db, type Closing, type Customer, type Expense, type ExpensePayment, type Payment, type Product, type Role, type Sale } from './db'
 
 /** Keeps this phone and the server in step. Works offline: everything is saved here first and sent when there is signal. */
 
@@ -37,16 +37,17 @@ async function getCursor(t: string): Promise<string | null> {
 const setCursor = (t: string, v: string): Promise<unknown> => db.meta.put({ key: `cur:${t}`, value: v })
 
 export async function countPending(): Promise<number> {
-  const [a, b, c, d, e, f, g] = await Promise.all([
+  const [a, b, c, d, e, f, g, h] = await Promise.all([
     db.products.where('dirty').equals(1).count(),
     db.sales.where('dirty').equals(1).count(),
     db.payments.where('dirty').equals(1).count(),
     db.customers.where('dirty').equals(1).count(),
     db.expenses.where('dirty').equals(1).count(),
     db.closings.where('dirty').equals(1).count(),
-    db.deletions.count()
+    db.deletions.count(),
+    db.expensePayments.where('dirty').equals(1).count()
   ])
-  return a + b + c + d + e + f + g
+  return a + b + c + d + e + f + g + h
 }
 
 /**
@@ -121,11 +122,25 @@ async function push(api: Api, shopId: string, role: Role): Promise<void> {
       'expenses',
       expenses.map((e) => ({
         id: e.id, shop_id: shopId, amount: e.amount, note: e.note, category: e.category, method: e.method,
+        period: e.period ?? 'day', supplier: e.supplier ?? '', due_at: e.dueAt ? iso(e.dueAt) : null,
         items: e.items ?? null, created_at: iso(e.createdAt), by_user: e.by, by_name: e.byName ?? ''
       })),
       'id', true
     )
     for (const e of expenses) await clean<Expense>(db.expenses as never, e.id, e.rev, { sent: 1 })
+  }
+
+  const billPays = await db.expensePayments.where('dirty').equals(1).toArray()
+  if (billPays.length) {
+    await api.upsert(
+      'expense_payments',
+      billPays.map((p) => ({
+        id: p.id, shop_id: shopId, expense_id: p.expenseId, amount: p.amount, method: p.method,
+        created_at: iso(p.createdAt), by_user: p.by, by_name: p.byName ?? ''
+      })),
+      'id', true
+    )
+    for (const p of billPays) await clean<ExpensePayment>(db.expensePayments as never, p.id, p.rev)
   }
 
   const payments = await db.payments.where('dirty').equals(1).toArray()
@@ -253,9 +268,31 @@ async function pullAll(api: Api, shopId: string, role: Role): Promise<void> {
             continue
           }
           await db.expenses.put({
-            id, amount: num(r.amount), note: r.note as string, category: r.category as string, method: r.method as 'cash' | 'mpesa',
+            id, amount: num(r.amount), note: r.note as string, category: r.category as string, method: r.method as Expense['method'],
+            period: (['week', 'month', 'year'] as const).find((x) => x === r.period), supplier: (r.supplier as string) || undefined,
+            dueAt: r.due_at ? ms(r.due_at) : undefined,
             createdAt: ms(r.created_at), items: (r.items as Expense['items']) ?? undefined, by: r.by_user as string,
             byName: r.by_name as string, dirty: 0, sent: 1
+          })
+        }
+      })
+    })
+  }
+
+  if (money) {
+    await each('expense_payments', async (rows) => {
+      await db.transaction('rw', db.expensePayments, async () => {
+        for (const r of rows) {
+          const id = r.id as string
+          const cur = await db.expensePayments.get(id)
+          if (cur?.dirty) continue
+          if (r.deleted_at) {
+            if (cur) await db.expensePayments.delete(id)
+            continue
+          }
+          await db.expensePayments.put({
+            id, expenseId: r.expense_id as string, amount: num(r.amount), method: r.method as 'cash' | 'mpesa',
+            createdAt: ms(r.created_at), by: r.by_user as string, byName: r.by_name as string, dirty: 0
           })
         }
       })

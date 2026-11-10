@@ -65,15 +65,40 @@ export interface RestockLine {
   cost: number // buying price per item
 }
 
+/** How long an expense lasts. Rent paid today covers a month, so only a slice of it counts against each day's profit. */
+export type Period = 'day' | 'week' | 'month' | 'year'
+export const PERIODS: { id: Period; label: string; short: string }[] = [
+  { id: 'day', label: 'Just today', short: 'one day' },
+  { id: 'week', label: 'A week', short: 'a week' },
+  { id: 'month', label: 'A month', short: 'a month' },
+  { id: 'year', label: 'A year', short: 'a year' }
+]
+/** What most shops mean by each kind of expense. */
+export const defaultPeriod = (category: string): Period => (category === 'Rent' || category === 'Salary' || category === 'Electricity' ? 'month' : 'day')
+
 export interface Expense extends Synced {
   id: string
   amount: number
   note: string
   category: string
-  method: 'cash' | 'mpesa'
+  method: 'cash' | 'mpesa' | 'credit' // credit = bought now, to be paid later
+  period?: Period // missing = one day
+  supplier?: string // who is owed, for credit
+  dueAt?: number // when a credit expense is to be paid
   createdAt: number
   items?: RestockLine[] // set when the expense bought new stock
   sent?: 1 // the server has received this expense
+  by?: string
+  byName?: string
+}
+
+/** Money paid towards an expense that was bought on credit. */
+export interface ExpensePayment extends Synced {
+  id: string
+  expenseId: string
+  amount: number
+  method: 'cash' | 'mpesa'
+  createdAt: number
   by?: string
   byName?: string
 }
@@ -108,7 +133,7 @@ export interface Sale extends Synced {
 /** Something deleted here that the server still has. */
 export interface Deletion {
   id: string // "table:rowId"
-  table: 'products' | 'payments' | 'expenses'
+  table: 'products' | 'payments' | 'expenses' | 'expense_payments'
   rowId: string
 }
 
@@ -123,6 +148,7 @@ export class TallifyDB extends Dexie {
   payments!: EntityTable<Payment, 'id'>
   customers!: EntityTable<Customer, 'key'>
   expenses!: EntityTable<Expense, 'id'>
+  expensePayments!: EntityTable<ExpensePayment, 'id'>
   closings!: EntityTable<Closing, 'day'>
   deletions!: EntityTable<Deletion, 'id'>
   meta!: EntityTable<Meta, 'key'>
@@ -139,6 +165,7 @@ export class TallifyDB extends Dexie {
       deletions: 'id',
       meta: 'key'
     })
+    this.version(2).stores({ expensePayments: 'id, expenseId, createdAt, dirty' })
   }
 }
 
@@ -279,7 +306,10 @@ export interface ExpenseInput {
   amount: number
   note: string
   category: string
-  method: 'cash' | 'mpesa'
+  method: 'cash' | 'mpesa' | 'credit'
+  period?: Period
+  supplier?: string
+  dueAt?: number
   items?: RestockLine[]
 }
 
@@ -296,6 +326,8 @@ export async function addExpense(input: ExpenseInput): Promise<string> {
         category: input.category,
         method: input.method,
         createdAt: Date.now(),
+        ...(input.category !== STOCK_CATEGORY && input.period && input.period !== 'day' ? { period: input.period } : {}),
+        ...(input.method === 'credit' ? { supplier: input.supplier ?? '', ...(input.dueAt ? { dueAt: input.dueAt } : {}) } : {}),
         ...(items.length ? { items } : {}),
         ...who()
       } as Expense)
@@ -313,15 +345,35 @@ export async function addExpense(input: ExpenseInput): Promise<string> {
 
 /** Remove an expense. If it had bought stock, that stock comes back off the shelf. */
 export async function deleteExpense(id: string): Promise<void> {
-  await db.transaction('rw', db.expenses, db.products, db.deletions, async () => {
+  await db.transaction('rw', db.expenses, db.products, db.deletions, db.expensePayments, async () => {
     const e = await db.expenses.get(id)
     if (!e) return
+    for (const p of await db.expensePayments.where('expenseId').equals(id).toArray()) {
+      await db.expensePayments.delete(p.id)
+      await db.deletions.put({ id: `expense_payments:${p.id}`, table: 'expense_payments', rowId: p.id })
+    }
     for (const i of e.items ?? []) {
       const p = await db.products.get(i.productId)
       if (p) await db.products.update(i.productId, { stock: p.stock - i.qty })
     }
     await db.expenses.delete(id)
     await db.deletions.put({ id: `expenses:${id}`, table: 'expenses', rowId: id })
+  })
+  changed()
+}
+
+/** Pay some or all of a bill that was bought on credit. */
+export async function payExpense(expenseId: string, amount: number, method: 'cash' | 'mpesa'): Promise<string> {
+  const id = newId()
+  await db.expensePayments.add(touch({ id, expenseId, amount, method, createdAt: Date.now(), ...who() } as ExpensePayment))
+  changed()
+  return id
+}
+
+export async function deleteExpensePayment(id: string): Promise<void> {
+  await db.transaction('rw', db.expensePayments, db.deletions, async () => {
+    await db.expensePayments.delete(id)
+    await db.deletions.put({ id: `expense_payments:${id}`, table: 'expense_payments', rowId: id })
   })
   changed()
 }

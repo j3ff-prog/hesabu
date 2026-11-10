@@ -1,6 +1,7 @@
-import { STOCK_CATEGORY, type Expense, type Payment, type Product, type Sale } from './db'
+import { STOCK_CATEGORY, type Expense, type ExpensePayment, type Payment, type Product, type Sale } from './db'
 import { addDays, startOfDay } from './format'
 import { isCost, lineProfit } from './profit'
+import { buildGains, costsBetween, costsByDay, gainsBetween, outflows, sumFlows, unpaidBills } from './ledger'
 import type { Debtor } from './creditLogic'
 import { partsOf } from './pay'
 
@@ -20,11 +21,14 @@ export interface Dashboard {
   sales: number
   salesPrev: number
   count: number
-  profit: number // goods margin + food/service income - costs (see profit.ts)
+  profit: number // profit on sales that were paid, minus costs (see ledger.ts)
   countedShare: number // 0..1 of sales value that profit is based on
-  spent: number // costs, not counting new-stock purchases
+  spent: number // costs that belong to these days, not counting new-stock purchases
   stockBought: number
   collected: number
+  payables: number // bills still to pay
+  bills: number
+  paidOut: number // money paid out for expenses in this period
   creditGiven: number
   split: { cash: number; mpesa: number; credit: number }
   onHand: { cash: number; mpesa: number; total: number } // received minus spent, by cash and M-Pesa. Credit not yet paid is left out.
@@ -42,6 +46,7 @@ export function buildDashboard(
   sales: Sale[],
   payments: Payment[],
   expenses: Expense[],
+  expensePays: ExpensePayment[],
   products: Product[],
   debtors: Debtor[],
   days: number,
@@ -62,7 +67,6 @@ export function buildDashboard(
   const split = { cash: 0, mpesa: 0, credit: 0 }
   const bestMap = new Map<string, { name: string; qty: number; revenue: number }>()
   const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0, total: 0 }))
-  let earned = 0
   let unknown = 0
 
   for (const s of inRange) {
@@ -77,10 +81,7 @@ export function buildDashboard(
     h.count++
     h.total += s.total
     for (const l of s.lines) {
-      const lp = lineProfit(l)
-      earned += lp.margin + lp.income
-      d.profit += lp.margin + lp.income
-      unknown += lp.unknown
+      unknown += lineProfit(l).unknown
       const b = bestMap.get(l.name) ?? { name: l.name, qty: 0, revenue: 0 }
       b.qty += l.qty
       b.revenue += l.price * l.qty
@@ -90,15 +91,27 @@ export function buildDashboard(
   const sales_ = inRange.reduce((t, s) => t + s.total, 0)
 
   const exp = expenses.filter((e) => e.createdAt >= from && e.createdAt < to)
-  for (const e of exp) if (isCost(e)) daily[idx(e.createdAt)].profit -= e.amount
+  const gains = buildGains(sales, payments)
+  const costDays = costsByDay(expenses, from, days)
+  for (let i = 0; i < days; i++) daily[i].profit = gainsBetween(gains, addDays(from, i), addDays(from, i + 1)) - costDays[i]
+  const earned = gainsBetween(gains, from, to)
+  const spent = costsBetween(expenses, from, to)
+  const flows = outflows(expenses, expensePays)
   const pays = payments.filter((p) => p.createdAt >= from && p.createdAt < to)
   const sumBy = (xs: { amount: number }[]) => xs.reduce((t, x) => t + x.amount, 0)
-  const onHandCash = split.cash + sumBy(pays.filter((p) => p.method === 'cash')) - sumBy(exp.filter((e) => e.method === 'cash'))
-  const onHandMpesa = split.mpesa + sumBy(pays.filter((p) => p.method === 'mpesa')) - sumBy(exp.filter((e) => e.method === 'mpesa'))
-  const spent = exp.filter(isCost).reduce((t, e) => t + e.amount, 0)
+  const cashOut = sumFlows(flows, from, to, 'cash')
+  const mpesaOut = sumFlows(flows, from, to, 'mpesa')
+  const onHandCash = split.cash + sumBy(pays.filter((p) => p.method === 'cash')) - cashOut
+  const onHandMpesa = split.mpesa + sumBy(pays.filter((p) => p.method === 'mpesa')) - mpesaOut
   const stockBought = exp.filter((e) => e.category === STOCK_CATEGORY).reduce((t, e) => t + e.amount, 0)
+  // Costs are shown by the share that belongs to these days; new stock is shown at what was bought.
   const catMap = new Map<string, number>()
-  for (const e of exp) catMap.set(e.category, (catMap.get(e.category) ?? 0) + e.amount)
+  for (const e of expenses.filter(isCost)) {
+    const share = costsBetween([e], from, to)
+    if (share > 0) catMap.set(e.category, (catMap.get(e.category) ?? 0) + share)
+  }
+  if (stockBought > 0) catMap.set(STOCK_CATEGORY, stockBought)
+  const owedBills = unpaidBills(expenses, expensePays)
 
   const ages = [
     { label: 'Up to a week', min: 0, max: 7, amount: 0, people: 0 },
@@ -129,7 +142,10 @@ export function buildDashboard(
     countedShare: sales_ > 0 ? (sales_ - unknown) / sales_ : 1,
     spent,
     stockBought,
-    collected: payments.filter((p) => p.createdAt >= from && p.createdAt < to).reduce((t, p) => t + p.amount, 0),
+    collected: sumBy(pays),
+    payables: owedBills.reduce((t, b) => t + b.balance, 0),
+    bills: owedBills.length,
+    paidOut: cashOut + mpesaOut,
     creditGiven: split.credit,
     split,
     onHand: { cash: onHandCash, mpesa: onHandMpesa, total: onHandCash + onHandMpesa },

@@ -69,7 +69,7 @@ export interface PushSub {
   auth: string
 }
 
-export type SyncTable = 'products' | 'product_costs' | 'sales' | 'payments' | 'customers' | 'expenses' | 'closings'
+export type SyncTable = 'products' | 'product_costs' | 'sales' | 'payments' | 'customers' | 'expenses' | 'expense_payments' | 'closings'
 export type Row = Record<string, unknown>
 
 export interface Api {
@@ -96,7 +96,7 @@ export interface Api {
   upsert(table: SyncTable, rows: Row[], onConflict: string, ignoreDuplicates: boolean): Promise<void>
   pushSale(sale: Row, lines: Row[]): Promise<void>
   voidSale(id: string, at: string): Promise<void>
-  softDelete(table: 'products' | 'payments' | 'expenses', id: string): Promise<void>
+  softDelete(table: 'products' | 'payments' | 'expenses' | 'expense_payments', id: string): Promise<void>
 
   savePush(shopId: string | null, sub: PushSub): Promise<void>
   removePush(endpoint: string): Promise<void>

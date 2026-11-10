@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Expense } from './db'
-import { addDays, dateLabel, money, startOfDay, timeOf } from './format'
+import { addDays, dateLabel, money, shortDate, startOfDay, timeOf } from './format'
+import { billOf, unpaidBills } from './ledger'
 import { PlusIcon } from './Icons'
 import { ExpenseDetail, ExpenseSheet } from './ExpenseSheet'
 import { useAuth } from './Auth'
@@ -22,6 +23,7 @@ export function Expenses() {
   const [adding, setAdding] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
   const all = useLiveQuery(() => db.expenses.orderBy('createdAt').reverse().toArray(), [])
+  const pays = useLiveQuery(() => db.expensePayments.toArray(), [])
 
   const from = range === 'today' ? startOfDay() : range === 'week' ? addDays(startOfDay(), -6) : range === 'month' ? addDays(startOfDay(), -29) : 0
   const list = useMemo(() => (all ?? []).filter((e) => e.createdAt >= from), [all, from])
@@ -39,10 +41,12 @@ export function Expenses() {
     return [...m.entries()].sort((a, b) => b[1] - a[1])
   }, [list])
 
-  if (!all) return <main className="page" />
+  if (!all || !pays) return <main className="page" />
   if (!can('expenses')) return <main className="page"><h1>Expenses</h1><p className="muted">You don’t have access to expenses.</p></main>
   const total = list.reduce((t, e) => t + e.amount, 0)
   const openExpense = all.find((e) => e.id === open)
+  const bills = unpaidBills(all, pays)
+  const owe = bills.reduce((t, b) => t + b.balance, 0)
 
   return (
     <main className="page has-fab">
@@ -56,10 +60,35 @@ export function Expenses() {
       </div>
 
       <div className="owed">
-        <p className="owed-label">Spent</p>
+        <p className="owed-label">Recorded</p>
         <p className="owed-num"><span>KES</span> {money(total)}</p>
-        <p className="muted">{list.length} {list.length === 1 ? 'expense' : 'expenses'}</p>
+        <p className="muted">{list.length} {list.length === 1 ? 'expense' : 'expenses'}, including bills not yet paid</p>
       </div>
+
+      {bills.length > 0 && (
+        <section className="bills" aria-label="Bills to pay">
+          <p className="owed-label">You owe suppliers</p>
+          <p className="owed-num"><span>KES</span> {money(owe)}</p>
+          <ul className="plain">
+            {bills.map((b) => {
+              const late = !!b.expense.dueAt && b.expense.dueAt < Date.now()
+              return (
+                <li key={b.expense.id}>
+                  <button className="sale-row" onClick={() => setOpen(b.expense.id)}>
+                    <span className="sale-main">
+                      <span>{b.expense.supplier || b.expense.category}</span>
+                      <span className={late ? 'warn-text' : 'muted'}>
+                        {b.expense.dueAt ? `${late ? 'Was due' : 'Due'} ${shortDate(b.expense.dueAt)}` : 'No due date'} · {b.expense.category}
+                      </span>
+                    </span>
+                    <span className="strong">{money(b.balance)}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
 
       {byCat.length > 1 && (
         <ul className="cat-pills" aria-label="By category">
@@ -72,7 +101,7 @@ export function Expenses() {
       {list.length === 0 ? (
         <div className="empty">
           <p className="empty-title">No expenses {range === 'today' ? 'today' : 'in this period'}</p>
-          <p>Record rent, transport, salaries and what you pay suppliers. When you buy new stock, pick the products and your stock count goes up by itself.</p>
+          <p>Record rent, transport, salaries and what you pay suppliers. Not paid yet? Choose Pay later and it shows as money you owe. When you buy new stock, pick the products and your stock count goes up by itself.</p>
         </div>
       ) : (
         groups.map(([day, items]) => (
@@ -84,7 +113,11 @@ export function Expenses() {
                   <button className="sale-row" onClick={() => setOpen(e.id)}>
                     <span className="sale-main">
                       <span>{e.category}{e.note && e.note !== e.category ? ` · ${e.note}` : ''}</span>
-                      <span className="muted">{timeOf(e.createdAt)} · {e.method === 'cash' ? 'Cash' : 'M-Pesa'}{e.byName ? ` · ${e.byName}` : ''}{e.items?.length ? ' · Added to stock' : ''}</span>
+                      <span className="muted">
+                        {timeOf(e.createdAt)} · {e.method === 'cash' ? 'Cash' : e.method === 'mpesa' ? 'M-Pesa' : billOf(e, pays).balance >= 1 ? `Unpaid, KES ${money(billOf(e, pays).balance)} left` : 'Bill paid'}
+                        {e.period && e.period !== 'day' ? ` · Lasts ${e.period === 'week' ? 'a week' : e.period === 'month' ? 'a month' : 'a year'}` : ''}
+                        {e.byName ? ` · ${e.byName}` : ''}{e.items?.length ? ' · Added to stock' : ''}
+                      </span>
                     </span>
                     <span className="strong">{money(e.amount)}</span>
                   </button>

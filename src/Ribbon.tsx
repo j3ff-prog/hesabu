@@ -6,6 +6,7 @@ import { ROLE_LABEL } from './rights'
 import { PAY_URL, PRICE, shortDate } from './format'
 import { Sheet } from './Sheet'
 import { useSyncStatus } from './sync'
+import { showInstall, useCanInstall } from './Install'
 
 export type Panel = null | 'menu' | 'settings' | 'data' | 'team' | 'pin' | 'help' | 'notify'
 
@@ -99,6 +100,7 @@ export function Ribbon({ shop, open }: { shop: string; open: (p: Panel) => void 
 export function MenuSheet({ shop, open, onClose }: { shop: string; open: (p: Panel) => void; onClose: () => void }) {
   const { me, can, signOut, shops, switchShop, shopId, shopState } = useAuth()
   const [sure, setSure] = useState<number | null>(null)
+  const canInstall = useCanInstall()
   const data = can('export') || can('importStock')
   const item = (label: string, hint: string, go: () => void) => (
     <li key={label}>
@@ -124,6 +126,7 @@ export function MenuSheet({ shop, open, onClose }: { shop: string; open: (p: Pan
         {item('Change my PIN', 'Choose a new PIN', () => open('pin'))}
         {shops.length > 1 && shops.filter((s) => s.id !== shopId).map((s) => item('Switch to ' + s.name, ROLE_LABEL[s.role], () => switchShop(s.id)))}
         {can('settings') && item('Notifications', 'Sales by your team, support replies', () => open('notify'))}
+        {canInstall && item('Install the app', 'Add Tallyfy to your home screen', () => { onClose(); showInstall() })}
         {item('Help and support', 'Chat with us, quick answers', () => open('help'))}
       </ul>
       {sure !== null && (

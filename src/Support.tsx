@@ -3,6 +3,7 @@ import { useAuth } from './Auth'
 import { api } from './api'
 import { ApiError, type SupportMsg } from './cloudApi'
 import { SUPPORT_EMAIL, supportLink } from './format'
+import { useInstallOpen } from './Install'
 import { disablePush, enablePush, pushState, type PushState } from './push'
 import { Sheet } from './Sheet'
 
@@ -227,6 +228,7 @@ export function NotifyAsk() {
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const installing = useInstallOpen()
   useEffect(() => {
     let asked = false
     try {
@@ -246,7 +248,7 @@ export function NotifyAsk() {
       /* ignore */
     }
   }
-  if (!show) return null
+  if (!show || installing) return null
   const no = () => {
     remember()
     setShow(false)

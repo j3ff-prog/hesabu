@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { billOf } from './ledger'
 import { db, importProducts, productKey, type ProductRow } from './db'
 import { buildDebtors } from './creditLogic'
 import { downloadFile, parseCsv, readProducts, TEMPLATE, toCsv, type ImportPreview } from './csv'
@@ -100,9 +101,18 @@ export function DataSheet({ onClose }: { onClose: () => void }) {
   const expenses = async () => {
     const [from, to] = range()
     const list = (await db.expenses.where('createdAt').between(from, to, true, false).toArray()).sort((a, b) => a.createdAt - b.createdAt)
-    const rows: (string | number)[][] = [['Date', 'Time', 'Category', 'Note', 'Amount', 'Paid with', 'Products added to stock', 'Recorded by']]
-    for (const e of list)
-      rows.push([isoDate(e.createdAt), isoTime(e.createdAt), e.category, e.note, e.amount, e.method === 'cash' ? 'Cash' : 'M-Pesa', (e.items ?? []).map((i) => `${i.qty} x ${i.name}`).join('; '), e.byName ?? ''])
+    const pays = await db.expensePayments.toArray()
+    const rows: (string | number)[][] = [['Date', 'Time', 'Category', 'Note', 'Amount', 'Paid with', 'Lasts', 'Owed to', 'Paid so far', 'Still to pay', 'Products added to stock', 'Recorded by']]
+    for (const e of list) {
+      const b = billOf(e, pays)
+      rows.push([
+        isoDate(e.createdAt), isoTime(e.createdAt), e.category, e.note, e.amount,
+        e.method === 'cash' ? 'Cash' : e.method === 'mpesa' ? 'M-Pesa' : 'Pay later',
+        e.period === 'week' ? 'A week' : e.period === 'month' ? 'A month' : e.period === 'year' ? 'A year' : 'One day',
+        e.supplier ?? '', e.method === 'credit' ? b.paid : e.amount, e.method === 'credit' ? b.balance : 0,
+        (e.items ?? []).map((i) => `${i.qty} x ${i.name}`).join('; '), e.byName ?? ''
+      ])
+    }
     if (rows.length > 1) downloadFile(`${slug}-expenses-${stamp()}.csv`, toCsv(rows))
     done('expenses', rows.length - 1)
   }

@@ -1,7 +1,8 @@
-import type { Expense, Payment, Product, Sale } from './db'
-import { dateLabel, money } from './format'
-import { isCost, lineProfit } from './profit'
+import type { Expense, ExpensePayment, Payment, Product, Sale } from './db'
+import { addDays, dateLabel, money } from './format'
+import { lineProfit } from './profit'
 import { partsOf } from './pay'
+import { buildGains, costsBetween, gainsBetween, outflows, sumFlows, unpaidBills } from './ledger'
 
 export interface DayFigures {
   live: Sale[] // sales that were not cancelled
@@ -12,45 +13,59 @@ export interface DayFigures {
   collected: number // paid back by credit customers
   cashCollected: number
   mpesaCollected: number
-  spent: number
+  spent: number // money paid out today for expenses, including bills paid off today
   cashSpent: number
   mpesaSpent: number
-  onHand: { cash: number; mpesa: number; total: number } // money you should really have: received minus spent. Credit not yet paid is left out.
-  profit: number // see profit.ts
+  onHand: { cash: number; mpesa: number; total: number } // money you should really have: received minus paid out. Credit not yet paid is left out.
+  profit: number // see ledger.ts
+  costs: number // the share of costs that belongs to today
   hasCost: boolean // there is something to base a profit on
+  unknown: number // selling value of goods with no buying price, left out of profit
+  payables: number // bills still to pay, all time
+  bills: number // number of those bills
 }
 
-export function dayFigures(sales: Sale[], payments: Payment[], expenses: Expense[]): DayFigures {
-  const live = sales.filter((s) => !s.voidedAt)
+/** All the figures for one day. Pass everything the phone has: older credit and bills can be paid today. */
+export function dayFigures(day: number, sales: Sale[], payments: Payment[], expenses: Expense[], expensePayments: ExpensePayment[]): DayFigures {
+  const end = addDays(day, 1)
+  const live = sales.filter((s) => !s.voidedAt && s.createdAt >= day && s.createdAt < end)
   const by = (m: 'cash' | 'mpesa' | 'credit') => live.reduce((t, s) => t + partsOf(s)[m], 0)
-  let earned = 0
   let hasCost = false
+  let unknown = 0
   for (const s of live)
     for (const l of s.lines) {
       const p = lineProfit(l)
       if (p.margin || p.income) hasCost = true
-      earned += p.margin + p.income
+      unknown += p.unknown
     }
+  const todays = payments.filter((p) => p.createdAt >= day && p.createdAt < end)
   const sum = (xs: { amount: number }[]) => xs.reduce((t, x) => t + x.amount, 0)
-  const cashIn = by('cash') + sum(payments.filter((p) => p.method === 'cash'))
-  const mpesaIn = by('mpesa') + sum(payments.filter((p) => p.method === 'mpesa'))
-  const cashOut = sum(expenses.filter((e) => e.method === 'cash'))
-  const mpesaOut = sum(expenses.filter((e) => e.method === 'mpesa'))
+  const flows = outflows(expenses, expensePayments)
+  const cashOut = sumFlows(flows, day, end, 'cash')
+  const mpesaOut = sumFlows(flows, day, end, 'mpesa')
+  const cashIn = by('cash') + sum(todays.filter((p) => p.method === 'cash'))
+  const mpesaIn = by('mpesa') + sum(todays.filter((p) => p.method === 'mpesa'))
+  const costs = costsBetween(expenses, day, end)
+  const owed = unpaidBills(expenses, expensePayments)
   return {
     live,
     total: live.reduce((t, s) => t + s.total, 0),
     cash: by('cash'),
     mpesa: by('mpesa'),
     credit: by('credit'),
-    collected: sum(payments),
-    cashCollected: sum(payments.filter((p) => p.method === 'cash')),
-    mpesaCollected: sum(payments.filter((p) => p.method === 'mpesa')),
-    spent: sum(expenses),
+    collected: sum(todays),
+    cashCollected: sum(todays.filter((p) => p.method === 'cash')),
+    mpesaCollected: sum(todays.filter((p) => p.method === 'mpesa')),
+    spent: cashOut + mpesaOut,
     cashSpent: cashOut,
     mpesaSpent: mpesaOut,
     onHand: { cash: cashIn - cashOut, mpesa: mpesaIn - mpesaOut, total: cashIn + mpesaIn - cashOut - mpesaOut },
-    profit: earned - sum(expenses.filter(isCost)),
-    hasCost
+    profit: gainsBetween(buildGains(sales, payments), day, end) - costs,
+    costs,
+    hasCost,
+    unknown,
+    payables: owed.reduce((t, b) => t + b.balance, 0),
+    bills: owed.length
   }
 }
 
@@ -77,8 +92,10 @@ export function summaryText(shop: string, day: number, f: DayFigures, closing: C
     `Cash ${money(f.cash)} · M-Pesa ${money(f.mpesa)} · On credit ${money(f.credit)}`
   ]
   if (f.collected > 0) lines.push(`Collected from credit: KES ${money(f.collected)}`)
-  if (f.spent > 0) lines.push(`Spent: KES ${money(f.spent)}`)
+  if (f.spent > 0) lines.push(`Paid out: KES ${money(f.spent)}`)
   lines.push(`Money on hand: KES ${money(f.onHand.total)} (cash ${money(f.onHand.cash)}, M-Pesa ${money(f.onHand.mpesa)})`)
+  lines.push(f.profit >= 0 ? `Profit today: KES ${money(f.profit)}` : `Loss today: KES ${money(-f.profit)}`)
+  if (f.payables > 0) lines.push(`You owe suppliers: KES ${money(f.payables)}`)
   if (closing) {
     lines.push('', `Cash check: should be KES ${money(closing.expected)}, counted KES ${money(closing.counted)}`, `*${diffText(closing.diff)}*`)
   }

@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from './Auth'
 import { ChangePinSheet } from './SignIn'
 import { Ribbon, MenuSheet, type Panel } from './Ribbon'
 import { HelpSheet, NotifyAsk, NotifySheet } from './Support'
+import { InstallAsk } from './Install'
 import { TeamSheet } from './Team'
 import { DataSheet } from './DataSheet'
 import { SettingsSheet } from './Settings'
@@ -32,9 +33,12 @@ export default function App() {
   }
 
   return (
-    <AuthProvider>
-      <Shell />
-    </AuthProvider>
+    <>
+      <AuthProvider>
+        <Shell />
+      </AuthProvider>
+      <InstallAsk />
+    </>
   )
 }
 

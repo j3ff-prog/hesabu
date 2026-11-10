@@ -13,7 +13,7 @@ export function Reports({ shop }: { shop: string }) {
         {dash && (
           <nav className="subtabs" aria-label="Reports">
             <NavLink to="/reports" end>Today</NavLink>
-            <NavLink to="/reports/dashboard">Dashboard</NavLink>
+            <NavLink to="/reports/dashboard">Overview</NavLink>
           </nav>
         )}
       </div>

@@ -2140,3 +2140,42 @@ a.menu-item { text-decoration: none; color: inherit; display: flex; }
 .faq { border-bottom: 1px solid var(--line); padding: 0.5rem 0; }
 .faq summary { font-weight: 600; cursor: pointer; }
 .faq p { margin: 0.4rem 0 0; }
+
+/* ---------- Reports: money on hand first ---------- */
+.hero-split.two { grid-template-columns: repeat(2, 1fr); }
+.hero-num.neg { color: #ffd9a0; }
+.hero-pl { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-top: 14px; padding: 12px 14px; border-radius: 16px; background: rgba(255, 255, 255, 0.14); }
+.hero-pl span { font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.9); }
+.hero-pl strong { font-family: var(--display); font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hero-pl.loss strong { color: #ffd9a0; }
+.hero-note { margin-top: 12px; font-size: 13px; line-height: 1.45; color: rgba(255, 255, 255, 0.82); }
+.card-soft { padding: 1rem 1.1rem; border-radius: 20px; background: var(--card, #fff); border: 1px solid var(--line); margin-bottom: 0.75rem; }
+.card-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; margin-bottom: 0.5rem; }
+.hero-label.dark { color: var(--muted); }
+.card-num { font-family: var(--display); font-weight: 800; font-size: 28px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.card-count { color: var(--muted); font-size: 14px; }
+.mini-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr)); gap: 0.5rem; margin: 0.75rem 0 0; padding-top: 0.6rem; border-top: 1px solid var(--line); }
+.mini-split dt { font-size: 13px; color: var(--muted); }
+.mini-split dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.owe-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.6rem; margin-bottom: 1rem; }
+.owe-card { display: flex; flex-direction: column; gap: 2px; padding: 0.8rem 1rem; border-radius: 16px; border: 1px solid var(--line); background: var(--card, #fff); color: inherit; text-decoration: none; }
+.owe-card strong { font-family: var(--display); font-size: 20px; font-variant-numeric: tabular-nums; }
+.owe-card.bill { border-color: color-mix(in srgb, var(--alert, #c23b32) 45%, var(--line)); }
+.owe-label { font-size: 13px; color: var(--muted); font-weight: 600; }
+
+/* ---------- Bills ---------- */
+.bills { margin: 0.5rem 0 1rem; padding: 1rem 1.1rem; border-radius: 16px; border: 1px solid color-mix(in srgb, var(--alert, #c23b32) 40%, var(--line)); background: var(--card, #fff); }
+.bills .owed-num { font-size: 32px; margin-bottom: 0.4rem; }
+.warn-text { color: var(--alert, #c23b32); }
+.bill-box { margin: 1rem 0; padding: 0.9rem 1rem; border-radius: 14px; border: 1px solid var(--line); }
+.bill-line { display: flex; justify-content: space-between; gap: 1rem; padding: 0.2rem 0; font-variant-numeric: tabular-nums; }
+.bill-line.bad strong { color: var(--alert, #c23b32); }
+.pay-history { margin: 0.5rem 0; }
+.pay-history li { display: flex; justify-content: space-between; gap: 0.75rem; align-items: center; }
+.pay-history .link.inline { margin-left: 0.6rem; }
+.pay-bill { margin-top: 0.75rem; }
+.segment.three button { flex: 1; }
+
+/* ---------- Install prompt ---------- */
+.install-steps { margin: 0.5rem 0 1rem; padding-left: 1.2rem; line-height: 1.6; }
+.install-art { display: flex; justify-content: center; margin: 0.25rem 0 0.75rem; }

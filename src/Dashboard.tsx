@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { isService, db } from './db'
+import { outflows, unpaidBills } from './ledger'
 import { useDebtors } from './creditLogic'
 import { partsOf } from './pay'
 import { buildDashboard } from './analytics'
@@ -39,26 +40,28 @@ export function Dashboard() {
   const sales = useLiveQuery(() => db.sales.toArray(), [])
   const payments = useLiveQuery(() => db.payments.toArray(), [])
   const expenses = useLiveQuery(() => db.expenses.toArray(), [])
+  const expensePays = useLiveQuery(() => db.expensePayments.toArray(), [])
   const products = useLiveQuery(() => db.products.toArray(), [])
   const debtors = useDebtors()
 
   const d = useMemo(
-    () => (sales && payments && expenses && products && debtors ? buildDashboard(sales, payments, expenses, products, debtors, days) : null),
-    [sales, payments, expenses, products, debtors, days]
+    () => (sales && payments && expenses && expensePays && products && debtors ? buildDashboard(sales, payments, expenses, expensePays, products, debtors, days) : null),
+    [sales, payments, expenses, expensePays, products, debtors, days]
   )
   const worth = useMemo(() => {
-    if (!sales || !payments || !expenses || !products || !debtors) return null
+    if (!sales || !payments || !expenses || !expensePays || !products || !debtors) return null
     const inn = sales.filter((s) => !s.voidedAt).reduce((t, s) => t + partsOf(s).cash + partsOf(s).mpesa, 0) + payments.reduce((t, p) => t + p.amount, 0)
-    const out = expenses.reduce((t, e) => t + e.amount, 0)
+    const out = outflows(expenses, expensePays).reduce((t, f) => t + f.amount, 0)
     const goods = products.filter((p) => !isService(p) && p.stock > 0)
     const stock = goods.reduce((t, p) => t + p.stock * p.cost, 0)
     return {
       onHand: inn - out,
       stock,
       unpriced: goods.filter((p) => !(p.cost > 0)).length,
-      owed: debtors.reduce((t, x) => t + x.balance, 0)
+      owed: debtors.reduce((t, x) => t + x.balance, 0),
+      payable: unpaidBills(expenses, expensePays).reduce((t, b) => t + b.balance, 0)
     }
-  }, [sales, payments, expenses, products, debtors])
+  }, [sales, payments, expenses, expensePays, products, debtors])
   if (!d) return null
   if (!can('dashboard')) return <p className="muted pad">You don’t have access to the dashboard.</p>
 
@@ -82,21 +85,6 @@ export function Dashboard() {
 
   return (
     <div className="dash">
-      {worth && can('seeCost') && can('expenses') && (
-        <section className="worth" aria-label="What the business is worth">
-          <p className="kpi-label">What your business is worth</p>
-          <p className={'worth-num' + (worth.onHand + worth.stock + worth.owed < 0 ? ' bad' : '')}>KES {money(worth.onHand + worth.stock + worth.owed)}</p>
-          <dl>
-            <div><dt>Money on hand (cash and M-Pesa)</dt><dd>{money(worth.onHand)}</dd></div>
-            <div><dt>Stock you hold, at buying price</dt><dd>{money(worth.stock)}</dd></div>
-            <div><dt>Owed to you by customers</dt><dd>{money(worth.owed)}</dd></div>
-          </dl>
-          <p className="hint">
-            Counted from your records since you started using Tallyfy. Money you had before, or took out for yourself, is not included.
-            {worth.unpriced > 0 ? ` ${worth.unpriced} item${worth.unpriced === 1 ? '' : 's'} in stock ${worth.unpriced === 1 ? 'has' : 'have'} no buying price and ${worth.unpriced === 1 ? 'is' : 'are'} left out.` : ''}
-          </p>
-        </section>
-      )}
       <div className="segment small" role="radiogroup" aria-label="Period">
         {PERIODS.map((p) => (
           <button key={p} role="radio" aria-checked={days === p} className={days === p ? 'on' : ''} onClick={() => setDays(p)}>
@@ -106,44 +94,60 @@ export function Dashboard() {
       </div>
       <p className="muted sub-range">{days === 1 ? 'Today, ' + shortDate(d.from) : `${shortDate(d.from)} to ${shortDate(d.to - 1)}`}</p>
 
+      {can('expenses') ? (
+        <section className="hero" aria-label="Money on hand">
+          <p className="hero-label">Money on hand</p>
+          <p className={'hero-num' + (d.onHand.total < 0 ? ' neg' : '')}><span>KES</span> {money(d.onHand.total)}</p>
+          <dl className="hero-split two">
+            <div><dt>In cash</dt><dd>{money(d.onHand.cash)}</dd></div>
+            <div><dt>On M-Pesa</dt><dd>{money(d.onHand.mpesa)}</dd></div>
+          </dl>
+          {can('seeCost') && (
+            <div className={'hero-pl' + (d.profit < 0 ? ' loss' : '')}>
+              <span>{d.profit < 0 ? 'Loss' : 'Profit'}</span>
+              <strong>KES {money(Math.abs(d.profit))}</strong>
+            </div>
+          )}
+          <p className="hero-note">
+            Money received minus money paid out. A credit sale counts once the customer pays. Costs like rent are spread over the days they cover.
+            {can('seeCost') && d.sales > 0 && d.countedShare < 0.999 ? ` Profit is based on ${Math.round(d.countedShare * 100)}% of sales: goods without a buying price are left out.` : ''}
+          </p>
+        </section>
+      ) : (
+        <section className="hero" aria-label="Sales">
+          <p className="hero-label">Sales</p>
+          <p className="hero-num"><span>KES</span> {money(d.sales)}</p>
+          <p className="hero-count">{d.count} {d.count === 1 ? 'sale' : 'sales'}{delta ? ` · ${delta}` : ''}</p>
+        </section>
+      )}
+
       <div className="kpis">
-        <div className="kpi">
-          <p className="kpi-label">Sales</p>
-          <p className="kpi-num">KES {money(d.sales)}</p>
-          <p className="kpi-sub">{d.count} {d.count === 1 ? 'sale' : 'sales'}{delta ? ` · ${delta}` : ''}</p>
-        </div>
-        {can('seeCost') && (
+        {can('expenses') && (
           <div className="kpi">
-            <p className="kpi-label">Profit</p>
-            <p className={'kpi-num ' + (d.profit < 0 ? 'bad' : 'good')}>KES {money(d.profit)}</p>
-            <p className="kpi-sub">
-              {d.sales === 0
-                ? 'No sales yet'
-                : d.countedShare < 0.999
-                  ? `Based on ${Math.round(d.countedShare * 100)}% of sales. Goods without a buying price are left out.`
-                  : 'After costs and expenses'}
-            </p>
+            <p className="kpi-label">Sales</p>
+            <p className="kpi-num">KES {money(d.sales)}</p>
+            <p className="kpi-sub">{d.count} {d.count === 1 ? 'sale' : 'sales'}{delta ? ` · ${delta}` : ''}</p>
           </div>
         )}
         {can('expenses') && (
           <div className="kpi">
-            <p className="kpi-label">Spent on costs</p>
+            <p className="kpi-label">Costs</p>
             <p className="kpi-num">KES {money(d.spent)}</p>
             <p className="kpi-sub">Ingredients, rent, transport and the like{d.stockBought > 0 ? `. Not counting KES ${money(d.stockBought)} of new stock.` : ''}</p>
           </div>
         )}
-        {can('expenses') && (
-          <div className="kpi">
-            <p className="kpi-label">Money on hand</p>
-            <p className={'kpi-num ' + (d.onHand.total < 0 ? 'bad' : '')}>KES {money(d.onHand.total)}</p>
-            <p className="kpi-sub">Cash {money(d.onHand.cash)} · M-Pesa {money(d.onHand.mpesa)}. Received minus spent. Money owed to you is not counted.</p>
-          </div>
-        )}
         <div className="kpi">
-          <p className="kpi-label">Owed to you now</p>
+          <p className="kpi-label">Customers owe you</p>
           <p className="kpi-num">KES {money(d.owed)}</p>
           <p className="kpi-sub">Collected KES {money(d.collected)} in this period</p>
         </div>
+        {can('expenses') && d.payables > 0 && (
+          <div className="kpi">
+            <p className="kpi-label">You owe suppliers</p>
+            <p className="kpi-num bad">KES {money(d.payables)}</p>
+            <p className="kpi-sub">{d.bills} {d.bills === 1 ? 'bill' : 'bills'} still to pay</p>
+          </div>
+        )}
       </div>
 
       <div className="dash-grid">
@@ -153,7 +157,7 @@ export function Dashboard() {
         </Card>
 
         {can('seeCost') && (
-          <Card title="Profit each day" sub="After costs and expenses. A loss goes below the line in red.">
+          <Card title="Profit each day" sub="Sales that were paid for, minus costs. A loss goes below the line in red.">
             <div className="segment small view-switch" role="radiogroup" aria-label="Chart style">
               <button role="radio" aria-checked={view === 'bars'} className={view === 'bars' ? 'on' : ''} onClick={() => setView('bars')}>Bars</button>
               <button role="radio" aria-checked={view === 'line'} className={view === 'line' ? 'on' : ''} onClick={() => setView('line')}>Line</button>
@@ -205,6 +209,23 @@ export function Dashboard() {
           </Card>
         )}
       </div>
+
+      {worth && can('seeCost') && can('expenses') && (
+        <section className="worth" aria-label="What the business is worth">
+          <p className="kpi-label">What your business is worth</p>
+          <p className={'worth-num' + (worth.onHand + worth.stock + worth.owed - worth.payable < 0 ? ' bad' : '')}>KES {money(worth.onHand + worth.stock + worth.owed - worth.payable)}</p>
+          <dl>
+            <div><dt>Money on hand (cash and M-Pesa)</dt><dd>{money(worth.onHand)}</dd></div>
+            <div><dt>Stock you hold, at buying price</dt><dd>{money(worth.stock)}</dd></div>
+            <div><dt>Owed to you by customers</dt><dd>{money(worth.owed)}</dd></div>
+            {worth.payable > 0 && <div><dt>You owe suppliers</dt><dd>− {money(worth.payable)}</dd></div>}
+          </dl>
+          <p className="hint">
+            Counted from your records since you started using Tallyfy. Money you had before, or took out for yourself, is not included.
+            {worth.unpriced > 0 ? ` ${worth.unpriced} item${worth.unpriced === 1 ? '' : 's'} in stock ${worth.unpriced === 1 ? 'has' : 'have'} no buying price and ${worth.unpriced === 1 ? 'is' : 'are'} left out.` : ''}
+          </p>
+        </section>
+      )}
     </div>
   )
 }

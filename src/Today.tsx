@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, voidSale, type Sale } from './db'
+import { useDebtors } from './creditLogic'
 import { dateLabel, money, startOfDay, timeOf } from './format'
 import { useAuth } from './Auth'
 import { useUi } from './Ui'
@@ -19,19 +20,23 @@ export function Today({ shop }: { shop: string }) {
   const ui = useUi()
   const full = can('today') // owners and managers see the whole day; attendants see only their own sales
   const day = startOfDay()
-  const sales = useLiveQuery(() => db.sales.where('createdAt').aboveOrEqual(day).reverse().toArray(), [day])
-  const payments = useLiveQuery(() => db.payments.where('createdAt').aboveOrEqual(day).toArray(), [day])
-  const expenses = useLiveQuery(() => db.expenses.where('createdAt').aboveOrEqual(day).reverse().toArray(), [day])
+  const sales = useLiveQuery(() => db.sales.toArray(), [])
+  const payments = useLiveQuery(() => db.payments.toArray(), [])
+  const expenses = useLiveQuery(() => db.expenses.toArray(), [])
+  const expensePays = useLiveQuery(() => db.expensePayments.toArray(), [])
   const closing = useLiveQuery(async () => (await db.closings.get(day)) ?? null, [day])
   const products = useLiveQuery(() => db.products.toArray(), [])
+  const debtors = useDebtors()
   const [open, setOpen] = useState<Sale | null>(null)
   const [panel, setPanel] = useState<Panel>(null)
 
-  if (!sales || !payments || !expenses || closing === undefined || !products) return <main className="page" />
+  if (!sales || !payments || !expenses || !expensePays || closing === undefined || !products || !debtors) return <main className="page" />
 
   const mine = full ? sales : sales.filter((s) => s.by === me.id)
-  const f = dayFigures(mine, full ? payments : [], full ? expenses : [])
-  const cancelled = mine.filter((s) => s.voidedAt)
+  const f = dayFigures(day, mine, full ? payments : [], full ? expenses : [], full ? expensePays : [])
+  const cancelled = mine.filter((s) => s.voidedAt && s.createdAt >= day).sort((a, b) => b.createdAt - a.createdAt)
+  const recordedToday = expenses.filter((e) => e.createdAt >= day).length
+  const owedToYou = debtors.reduce((t, d) => t + d.balance, 0)
   const low = products.filter((p) => p.kind !== 'service' && p.stock <= p.lowAt).sort((a, b) => a.stock - b.stock)
 
   const best = new Map<string, { name: string; qty: number }>()
@@ -58,30 +63,74 @@ export function Today({ shop }: { shop: string }) {
 
       <div className="today-cols">
       <div className="today-side">
-      <section className="hero" aria-label="Sales today">
-        <p className="hero-label">Sales today</p>
-        <p className="hero-num"><span>KES</span> {money(f.total)}</p>
-        {f.live.length > 0 ? <Tally count={f.live.length} /> : <p className="hero-empty">No sales yet today.</p>}
-        <p className="hero-count">{f.live.length} {f.live.length === 1 ? 'sale' : 'sales'}</p>
-        <dl className="hero-split">
-          <div><dt>Cash</dt><dd>{money(f.cash)}</dd></div>
-          <div><dt>M-Pesa</dt><dd>{money(f.mpesa)}</dd></div>
-          <div><dt>On credit</dt><dd>{money(f.credit)}</dd></div>
-        </dl>
-        {full && f.collected > 0 && <p className="hero-collected">Collected from credit KES {money(f.collected)}</p>}
-        {full && f.spent > 0 && <p className="hero-collected">Spent KES {money(f.spent)}</p>}
-        {full && can('seeCost') && f.hasCost && <p className="hero-profit">Estimated profit KES {money(f.profit)} after expenses</p>}
-      </section>
+      {full && can('expenses') ? (
+        <>
+          <section className="hero" aria-label="Money on hand today">
+            <p className="hero-label">Money on hand today</p>
+            <p className={'hero-num' + (f.onHand.total < 0 ? ' neg' : '')}><span>KES</span> {money(f.onHand.total)}</p>
+            <dl className="hero-split two">
+              <div><dt>In cash</dt><dd>{money(f.onHand.cash)}</dd></div>
+              <div><dt>On M-Pesa</dt><dd>{money(f.onHand.mpesa)}</dd></div>
+            </dl>
+            {can('seeCost') && (
+              <div className={'hero-pl' + (f.profit < 0 ? ' loss' : '')}>
+                <span>{f.profit < 0 ? 'Loss today' : 'Profit today'}</span>
+                <strong>KES {money(Math.abs(f.profit))}</strong>
+              </div>
+            )}
+            <p className="hero-note">
+              Money received today minus money you paid out. Customers who have not paid yet are not counted.
+              {can('seeCost') && f.costs > 0 ? ` Profit includes KES ${money(f.costs)} of costs for today, like your share of rent.` : ''}
+              {can('seeCost') && f.unknown > 0 ? ' Goods with no buying price are left out of profit.' : ''}
+            </p>
+          </section>
 
-      {full && can('expenses') && (
-        <section className="onhand" aria-label="Money on hand">
-          <p className="hero-label">Money on hand today</p>
-          <p className={'onhand-num' + (f.onHand.total < 0 ? ' bad' : '')}><span>KES</span> {money(f.onHand.total)}</p>
+          <section className="card-soft" aria-label="Sales today">
+            <div className="card-row">
+              <div>
+                <p className="hero-label dark">Sales today</p>
+                <p className="card-num">KES {money(f.total)}</p>
+              </div>
+              <p className="card-count">{f.live.length} {f.live.length === 1 ? 'sale' : 'sales'}</p>
+            </div>
+            {f.live.length > 0 ? <Tally count={f.live.length} /> : <p className="muted">No sales yet today.</p>}
+            <dl className="mini-split">
+              <div><dt>Cash</dt><dd>{money(f.cash)}</dd></div>
+              <div><dt>M-Pesa</dt><dd>{money(f.mpesa)}</dd></div>
+              <div><dt>On credit</dt><dd>{money(f.credit)}</dd></div>
+            </dl>
+            {f.collected > 0 && <p className="hint">Credit customers paid back KES {money(f.collected)} today.</p>}
+          </section>
+
+          {(owedToYou > 0 || f.payables > 0) && (
+            <section className="owe-pair" aria-label="Who owes what">
+              {owedToYou > 0 && can('credit') && (
+                <Link to="/credit" className="owe-card">
+                  <span className="owe-label">Customers owe you</span>
+                  <strong>KES {money(owedToYou)}</strong>
+                </Link>
+              )}
+              {f.payables > 0 && (
+                <Link to="/expenses" className="owe-card bill">
+                  <span className="owe-label">You owe suppliers</span>
+                  <strong>KES {money(f.payables)}</strong>
+                  <span className="muted">{f.bills} {f.bills === 1 ? 'bill' : 'bills'} to pay</span>
+                </Link>
+              )}
+            </section>
+          )}
+        </>
+      ) : (
+        <section className="hero" aria-label="Sales today">
+          <p className="hero-label">Sales today</p>
+          <p className="hero-num"><span>KES</span> {money(f.total)}</p>
+          {f.live.length > 0 ? <Tally count={f.live.length} /> : <p className="hero-empty">No sales yet today.</p>}
+          <p className="hero-count">{f.live.length} {f.live.length === 1 ? 'sale' : 'sales'}</p>
           <dl className="hero-split">
-            <div><dt>In cash</dt><dd className={f.onHand.cash < 0 ? 'bad' : ''}>{money(f.onHand.cash)}</dd></div>
-            <div><dt>On M-Pesa</dt><dd className={f.onHand.mpesa < 0 ? 'bad' : ''}>{money(f.onHand.mpesa)}</dd></div>
+            <div><dt>Cash</dt><dd>{money(f.cash)}</dd></div>
+            <div><dt>M-Pesa</dt><dd>{money(f.mpesa)}</dd></div>
+            <div><dt>On credit</dt><dd>{money(f.credit)}</dd></div>
           </dl>
-          <p className="hint">Money received today minus money spent. What customers still owe is not counted.</p>
         </section>
       )}
 
@@ -144,13 +193,16 @@ export function Today({ shop }: { shop: string }) {
         </section>
       )}
 
-      {full && f.spent > 0 && (
+      {full && (f.spent > 0 || recordedToday > 0) && (
         <section className="block-section">
           <div className="section-head">
-            <h2>Spent today</h2>
+            <h2>Expenses today</h2>
             <Link to="/expenses" className="link">See expenses</Link>
           </div>
-          <p className="muted">KES {money(f.spent)} across {expenses.length} {expenses.length === 1 ? 'expense' : 'expenses'}.</p>
+          <p className="muted">
+            {f.spent > 0 ? `KES ${money(f.spent)} paid out` : 'Nothing paid out yet'}
+            {recordedToday > 0 ? `, ${recordedToday} ${recordedToday === 1 ? 'expense' : 'expenses'} recorded` : ''}.
+          </p>
         </section>
       )}
 
