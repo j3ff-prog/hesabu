@@ -214,8 +214,11 @@ export function Today({ shop }: { shop: string }) {
             <li key={s.id}>
               <button className="sale-row" onClick={() => setOpen(s)}>
                 <span className="sale-main">
-                  <span>{summary(s)}</span>
-                  <span className="muted">{timeOf(s.createdAt)} · {payLabel(s)}{s.customer ? ` · ${s.customer}` : ''}{full && s.byName ? ` · ${s.byName}` : ''}</span>
+                  <span className="sale-title">
+                    <strong>{s.customer || 'Customer'}</strong>
+                    <span className="sale-what">{summary(s)}</span>
+                  </span>
+                  <span className="muted">{timeOf(s.createdAt)} · {payLabel(s)}{full && s.byName ? ` · Sold by ${s.byName}` : ''}</span>
                 </span>
                 <span className="strong">{money(s.total)}</span>
               </button>
@@ -230,7 +233,10 @@ export function Today({ shop }: { shop: string }) {
                 <li key={s.id}>
                   <button className="sale-row" onClick={() => setOpen(s)}>
                     <span className="sale-main">
-                      <span>{summary(s)}</span>
+                      <span className="sale-title">
+                        <strong>{s.customer || 'Customer'}</strong>
+                        <span className="sale-what">{summary(s)}</span>
+                      </span>
                       <span className="muted">{timeOf(s.createdAt)}</span>
                     </span>
                     <span>{money(s.total)}</span>
@@ -263,9 +269,9 @@ function SaleSheet({ sale, onClose, canVoid }: { sale: Sale; onClose: () => void
   const [sure, setSure] = useState(false)
   return (
     <Sheet title={sale.voidedAt ? 'Cancelled sale' : 'Sale'} onClose={onClose}>
+      {sale.customer && <p className="sale-who">{sale.customer}</p>}
       <p className="muted">
         {timeOf(sale.createdAt)} · {payLabel(sale)}
-        {sale.customer ? ` · ${sale.customer}` : ''}
         {sale.byName ? ` · Sold by ${sale.byName}` : ''}
       </p>
       <ul className="lines static">
@@ -283,17 +289,23 @@ function SaleSheet({ sale, onClose, canVoid }: { sale: Sale; onClose: () => void
         <span>Total</span>
         <span className="total-num">KES {money(sale.total)}</span>
       </div>
-      {!sale.voidedAt && canVoid && (
-        <button
-          className={'btn text-danger block' + (sure ? ' armed' : '')}
-          onClick={async () => {
-            if (!sure) return setSure(true)
-            await voidSale(sale.id)
-            onClose()
-          }}
-        >
-          {sure ? 'Tap again to cancel this sale' : 'Cancel this sale'}
-        </button>
+      {!sale.voidedAt && canVoid && !sure && (
+        <button className="btn text-danger block" onClick={() => setSure(true)}>Cancel this sale</button>
+      )}
+      {!sale.voidedAt && canVoid && sure && (
+        <div className="confirm-box" role="alertdialog" aria-label="Cancel this sale?">
+          <p className="confirm-q">Cancel this sale?</p>
+          <button
+            className="btn danger block"
+            onClick={async () => {
+              await voidSale(sale.id)
+              onClose()
+            }}
+          >
+            Yes, cancel it
+          </button>
+          <button className="btn outline block gap-top" onClick={() => setSure(false)}>No, keep it</button>
+        </div>
       )}
       {!sale.voidedAt && canVoid && <p className="hint center">Cancelling puts the items back in stock.</p>}
     </Sheet>

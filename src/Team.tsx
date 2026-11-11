@@ -126,8 +126,8 @@ function StaffForm({ shopId, shopName, onClose }: { shopId: string; shopName: st
   return (
     <Sheet title="Add a person" onClose={onClose}>
       <label className="field">
-        <span>Name</span>
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Wanjiru" autoComplete="off" />
+        <span>Their name</span>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
       </label>
       <label className="field">
         <span>Phone number</span>

@@ -8,7 +8,7 @@ import { Sheet } from './Sheet'
 import { useSyncStatus } from './sync'
 import { showInstall, useCanInstall } from './Install'
 
-export type Panel = null | 'menu' | 'settings' | 'data' | 'team' | 'pin' | 'help' | 'notify'
+export type Panel = null | 'menu' | 'settings' | 'data' | 'team' | 'pin' | 'help' | 'notify' | 'size'
 
 const useOnline = (): boolean => {
   const [on, setOn] = useState(navigator.onLine)
@@ -127,6 +127,7 @@ export function MenuSheet({ shop, open, onClose }: { shop: string; open: (p: Pan
         {shops.length > 1 && shops.filter((s) => s.id !== shopId).map((s) => item('Switch to ' + s.name, ROLE_LABEL[s.role], () => switchShop(s.id)))}
         {can('settings') && item('Notifications', 'Sales by your team, support replies', () => open('notify'))}
         {canInstall && item('Install the app', 'Add Tallyfy to your home screen', () => { onClose(); showInstall() })}
+        {item('Text size', 'Make the writing bigger or smaller', () => open('size'))}
         {item('Help and support', 'Chat with us, quick answers', () => open('help'))}
       </ul>
       {sure !== null && (

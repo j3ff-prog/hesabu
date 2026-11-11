@@ -4,6 +4,7 @@ import { api } from './api'
 import { ApiError, type SupportMsg } from './cloudApi'
 import { SUPPORT_EMAIL, supportLink } from './format'
 import { useInstallOpen } from './Install'
+import { useToast } from './Toast'
 import { disablePush, enablePush, pushState, type PushState } from './push'
 import { Sheet } from './Sheet'
 
@@ -115,7 +116,7 @@ export function HelpSheet({ onClose }: { onClose: () => void }) {
 }
 
 /** Turn notifications on or off for this phone. */
-export function NotifyBlock({ shopId, label }: { shopId: string | null; label: string }) {
+export function NotifyBlock({ shopId, label, onChanged }: { shopId: string | null; label: string; onChanged?: (now: PushState) => void }) {
   const [state, setState] = useState<PushState | null>(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -133,8 +134,10 @@ export function NotifyBlock({ shopId, label }: { shopId: string | null; label: s
     } catch (e) {
       setErr(errText(e))
     }
-    setState(await pushState())
+    const now = await pushState()
+    setState(now)
     setBusy(false)
+    if (onChanged && now !== state) onChanged(now)
   }
 
   return (
@@ -155,9 +158,16 @@ export function NotifyBlock({ shopId, label }: { shopId: string | null; label: s
 
 export function NotifySheet({ onClose }: { onClose: () => void }) {
   const { shopId } = useAuth()
+  const toast = useToast()
   return (
     <Sheet title="Notifications" onClose={onClose}>
-      <NotifyBlock shopId={shopId} label="Get a notification on this phone when someone on your team records a sale, and when Tallyfy support replies to you. Your own sales do not notify you." />
+      <NotifyBlock
+        shopId={shopId}
+        onChanged={(now) => {
+          toast.show({ text: now === 'on' ? 'Notifications are on' : 'Notifications are off' })
+          onClose()
+        }}
+        label="Get a notification on this phone when someone on your team records a sale, and when Tallyfy support replies to you. Your own sales do not notify you." />
     </Sheet>
   )
 }

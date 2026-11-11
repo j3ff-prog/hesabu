@@ -4,6 +4,7 @@ import { addDays, isoDate, startOfDay } from './format'
 import { addExpense, CATEGORIES, db, defaultPeriod, deleteExpense, deleteExpensePayment, isService, payExpense, PERIODS, STOCK_CATEGORY, type Expense, type Period, type Product, type RestockLine } from './db'
 import { billOf, perDay } from './ledger'
 import { money, timeOf, shortDate, toNum } from './format'
+import { useToast } from './Toast'
 import { Sheet } from './Sheet'
 import { SearchIcon } from './Icons'
 
@@ -83,8 +84,8 @@ export function ExpenseSheet({ onClose, onSaved }: { onClose: () => void; onSave
         </div>
       </div>
 
-      {category === 'Ingredients' && (
-        <p className="hint">Flour, milk, cooking gas and other things you use up to make food. They are taken off your profit, so Tallyfy can show what your food and services really earn.</p>
+      {category === 'Supplies' && (
+        <p className="hint">Things you use up to make or do what you sell. They are taken off your profit, so Tallyfy shows what you really earn.</p>
       )}
 
       {restock && (
@@ -156,8 +157,8 @@ export function ExpenseSheet({ onClose, onSaved }: { onClose: () => void; onSave
         <p className="hint">The items add up to KES {money(sum)}. Change the total only if you paid extra, like delivery.</p>
       )}
       <label className="field">
-        <span>{restock ? 'Supplier or note (optional)' : 'Note (optional)'}</span>
-        <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder={restock ? 'e.g. Wholesale, Gikomba' : 'e.g. Matatu to town'} />
+        <span>{restock ? 'Where did you buy it? (optional)' : 'What was it for? (optional)'}</span>
+        <input type="text" value={note} onChange={(e) => setNote(e.target.value)} />
       </label>
       {!restock && (
         <div className="field">
@@ -188,8 +189,8 @@ export function ExpenseSheet({ onClose, onSaved }: { onClose: () => void; onSave
       {credit ? (
         <>
           <label className="field">
-            <span>Who do you owe?</span>
-            <input type="text" value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. Wanjiru Wholesalers" />
+            <span>Who do you owe? (a person or business)</span>
+            <input type="text" value={supplier} onChange={(e) => setSupplier(e.target.value)} />
           </label>
           <label className="field">
             <span>Pay by</span>
@@ -211,6 +212,7 @@ export function ExpenseSheet({ onClose, onSaved }: { onClose: () => void; onSave
 
 /** Look at one expense, pay off a bill that was bought on credit, or remove it. Removing a stock purchase takes that stock back off the shelf. */
 export function ExpenseDetail({ expense, onClose, canRemove }: { expense: Expense; onClose: () => void; canRemove: boolean }) {
+  const toast = useToast()
   const [sure, setSure] = useState(false)
   const [paying, setPaying] = useState(false)
   const pays = useLiveQuery(() => db.expensePayments.where('expenseId').equals(expense.id).toArray(), [expense.id])
@@ -258,7 +260,7 @@ export function ExpenseDetail({ expense, onClose, canRemove }: { expense: Expens
           {canRemove && bill.balance >= 1 && !paying && (
             <button className="btn primary block" onClick={() => setPaying(true)}>Record a payment</button>
           )}
-          {canRemove && paying && <PayBill expenseId={expense.id} balance={bill.balance} onDone={() => setPaying(false)} />}
+          {canRemove && paying && <PayBill expenseId={expense.id} balance={bill.balance} onDone={(amt) => { toast.show({ text: 'Payment saved', sub: `KES ${money(amt)} paid to ${expense.supplier || 'supplier'}` }); onClose() }} />}
         </section>
       )}
 
@@ -275,17 +277,23 @@ export function ExpenseDetail({ expense, onClose, canRemove }: { expense: Expens
           </ul>
         </>
       )}
-      {canRemove && (
-        <button
-          className={'btn text-danger block' + (sure ? ' armed' : '')}
-          onClick={async () => {
-            if (!sure) return setSure(true)
-            await deleteExpense(expense.id)
-            onClose()
-          }}
-        >
-          {sure ? 'Tap again to remove this expense' : 'Remove this expense'}
-        </button>
+      {canRemove && !sure && (
+        <button className="btn text-danger block" onClick={() => setSure(true)}>Remove this expense</button>
+      )}
+      {canRemove && sure && (
+        <div className="confirm-box" role="alertdialog" aria-label="Remove this expense?">
+          <p className="confirm-q">Remove this expense?</p>
+          <button
+            className="btn danger block"
+            onClick={async () => {
+              await deleteExpense(expense.id)
+              onClose()
+            }}
+          >
+            Yes, remove it
+          </button>
+          <button className="btn outline block gap-top" onClick={() => setSure(false)}>No, keep it</button>
+        </div>
       )}
       {canRemove && expense.items && expense.items.length > 0 && <p className="hint center">Removing it takes this stock off the shelf again.</p>}
     </Sheet>
@@ -293,7 +301,7 @@ export function ExpenseDetail({ expense, onClose, canRemove }: { expense: Expens
 }
 
 /** Pay some or all of what is owed on a bill. */
-function PayBill({ expenseId, balance, onDone }: { expenseId: string; balance: number; onDone: () => void }) {
+function PayBill({ expenseId, balance, onDone }: { expenseId: string; balance: number; onDone: (amount: number) => void }) {
   const [amount, setAmount] = useState(String(Math.round(balance)))
   const [method, setMethod] = useState<'cash' | 'mpesa'>('cash')
   const [busy, setBusy] = useState(false)
@@ -303,8 +311,9 @@ function PayBill({ expenseId, balance, onDone }: { expenseId: string; balance: n
     if (bad || busy) return
     setBusy(true)
     try {
-      await payExpense(expenseId, Math.min(n, balance), method)
-      onDone()
+      const paid = Math.min(n, balance)
+      await payExpense(expenseId, paid, method)
+      onDone(paid)
     } finally {
       setBusy(false)
     }

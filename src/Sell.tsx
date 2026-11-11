@@ -45,17 +45,23 @@ export function Sell() {
       {today && today.length === 0 && (
         <div className="empty">
           <p className="empty-title">No sales yet today</p>
-          <p>Tap “New sale” below to record your first one.</p>
+          <ol className="first-steps">
+            <li>Tap <strong>New sale</strong> below.</li>
+            <li>Tap each item the customer is buying.</li>
+            <li>Press <strong>Continue</strong>, choose how they paid, then <strong>Record sale</strong>.</li>
+          </ol>
         </div>
       )}
       <ul className="recent">
         {(today ?? []).slice(0, 12).map((s) => (
           <li key={s.id}>
             <div>
-              <span className="line-name">{s.lines.map((l) => (l.qty > 1 ? `${l.qty} × ${l.name}` : l.name)).join(', ')}</span>
+              <span className="sale-title">
+                <strong>{s.customer || 'Customer'}</strong>
+                <span className="sale-what">{s.lines.map((l) => (l.qty > 1 ? `${l.qty} × ${l.name}` : l.name)).join(', ')}</span>
+              </span>
               <span className="muted">
                 {timeOf(s.createdAt)} · {payLabel(s)}
-                {s.customer ? ` · ${s.customer}` : ''}
               </span>
             </div>
             <span className="line-total">{money(s.total)}</span>
@@ -240,11 +246,11 @@ function AddItemSheet({
             Food or service
           </button>
         </div>
-        <p className="hint spaced">{kind === 'goods' ? 'Something you buy and resell, like sugar or a phone charger.' : 'Something you make or do, like a cup of porridge, a haircut or delivery.'}</p>
+        <p className="hint spaced">{kind === 'goods' ? 'Something you buy and resell.' : 'Something you make or do.'}</p>
       </fieldset>
       <label className="field">
-        <span>Name</span>
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Delivery, extra cup" autoFocus />
+        <span>Name of the item</span>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
       </label>
       <label className="field">
         <span>Selling price (KES)</span>
@@ -434,7 +440,7 @@ function Checkout({
           type="text"
           value={customer}
           onChange={(e) => setCustomer(e.target.value)}
-          placeholder={isCredit ? 'Customer name' : 'Leave empty if you don’t know'}
+          placeholder={isCredit ? 'Customer name' : 'You can leave this empty'}
           autoComplete="off"
           aria-required={isCredit}
         />

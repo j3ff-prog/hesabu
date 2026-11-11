@@ -54,7 +54,7 @@ export interface Customer extends Synced {
   phone?: string // saved as 2547XXXXXXXX
 }
 
-export const CATEGORIES = ['New stock', 'Ingredients', 'Transport', 'Rent', 'Electricity', 'Salary', 'Other'] as const
+export const CATEGORIES = ['New stock', 'Supplies', 'Transport', 'Rent', 'Electricity', 'Salary', 'Other'] as const
 export const STOCK_CATEGORY = 'New stock'
 
 /** One product bought in a "New stock" expense. */

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useToast } from './Toast'
 import { api } from './api'
 import { ApiError, type Session, type ShopInfo } from './cloudApi'
 import { showPhone, toWaNumber, SUPPORT_EMAIL } from './format'
@@ -114,7 +115,7 @@ export function ChangePinSheet({ onClose }: { onClose: () => void }) {
   const [b, setB] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState(false)
+  const toast = useToast()
   const ok = validPin(cur) && validPin(a) && a === b
 
   const field = (label: string, v: string, set: (s: string) => void) => (
@@ -126,12 +127,7 @@ export function ChangePinSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <Sheet title="Change my PIN" onClose={onClose}>
-      {done ? (
-        <>
-          <p className="hint ok-text" role="status">Your PIN has been changed.</p>
-          <button className="btn primary block" onClick={onClose}>Done</button>
-        </>
-      ) : (
+      {(
         <>
           {field('Current PIN', cur, setCur)}
           {field('New PIN (6 digits)', a, setA)}
@@ -145,7 +141,8 @@ export function ChangePinSheet({ onClose }: { onClose: () => void }) {
               setBusy(true)
               try {
                 await api.changePin(cur, a)
-                setDone(true)
+                toast.show({ text: 'PIN changed', sub: 'Use your new PIN next time you sign in' })
+                onClose()
               } catch (e) {
                 setErr(message(e))
               }

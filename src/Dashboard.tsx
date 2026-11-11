@@ -133,7 +133,7 @@ export function Dashboard() {
           <div className="kpi">
             <p className="kpi-label">Costs</p>
             <p className="kpi-num">KES {money(d.spent)}</p>
-            <p className="kpi-sub">Ingredients, rent, transport and the like{d.stockBought > 0 ? `. Not counting KES ${money(d.stockBought)} of new stock.` : ''}</p>
+            <p className="kpi-sub">Money spent running the business{d.stockBought > 0 ? `. Not counting KES ${money(d.stockBought)} of new stock.` : ''}</p>
           </div>
         )}
         <div className="kpi">

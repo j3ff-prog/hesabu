@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useToast } from './Toast'
 import { billOf } from './ledger'
 import { db, importProducts, productKey, type ProductRow } from './db'
 import { buildDebtors } from './creditLogic'
@@ -51,7 +52,12 @@ export function DataSheet({ onClose }: { onClose: () => void }) {
     return [fromOf(period), addDays(startOfDay(), 1)]
   }
 
-  const done = (what: string, n: number) => setMsg(n === 0 ? `Nothing to download for ${what} yet.` : `Downloaded ${n} ${n === 1 ? 'row' : 'rows'} of ${what}.`)
+  const toast = useToast()
+  const done = (what: string, n: number) => {
+    if (n === 0) return setMsg(`Nothing to download for ${what} yet.`)
+    toast.show({ text: 'Downloaded', sub: `${n} ${n === 1 ? 'row' : 'rows'} of ${what}` })
+    onClose()
+  }
 
   const sales = async () => {
     const [from, to] = range()
@@ -144,13 +150,13 @@ export function DataSheet({ onClose }: { onClose: () => void }) {
           {msg && <p className="hint ok-text" role="status">{msg}</p>}
         </>
       )}
-      {can('importStock') && <Upload onDone={setMsg} />}
+      {can('importStock') && <Upload onDone={setMsg} onFinished={(m) => { toast.show({ text: 'Items saved', sub: m }); onClose() }} />}
       {!can('export') && !can('importStock') && <p className="muted">You don’t have access to this.</p>}
     </Sheet>
   )
 }
 
-function Upload({ onDone }: { onDone: (m: string) => void }) {
+function Upload({ onDone, onFinished }: { onDone: (m: string) => void; onFinished: (m: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [fileName, setFileName] = useState('')
@@ -230,9 +236,9 @@ function Upload({ onDone }: { onDone: (m: string) => void }) {
             disabled={newCount + (update ? oldCount : 0) === 0}
             onClick={async () => {
               const r = await importProducts(preview.rows, update)
-              setResult(`Done: ${r.added} added, ${r.updated} updated${r.skipped ? `, ${r.skipped} left as they were` : ''}.`)
               onDone('')
               reset()
+              onFinished(`${r.added} added, ${r.updated} updated${r.skipped ? `, ${r.skipped} left as they were` : ''}`)
             }}
           >
             Add {newCount + (update ? oldCount : 0)} {newCount + (update ? oldCount : 0) === 1 ? 'product' : 'products'}

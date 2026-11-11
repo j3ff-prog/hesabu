@@ -7,10 +7,10 @@ import { ApiError } from './cloudApi'
 import { openShopDb } from './db'
 
 const CHOICES: { kind: StarterKind; title: string; hint: string }[] = [
-  { kind: 'grocery', title: 'Groceries and household', hint: 'Flour, sugar, oil, soap and similar' },
-  { kind: 'hardware', title: 'Hardware', hint: 'Nails, cement, paint, bulbs and similar' },
-  { kind: 'beauty', title: 'Cosmetics and beauty', hint: 'Lotion, soap, shampoo and similar' },
-  { kind: 'food', title: 'Food and drinks I make', hint: 'Porridge, tea, meals. No stock count; ingredients go under Expenses' },
+  { kind: 'grocery', title: 'Groceries and household', hint: 'Everyday goods for the home' },
+  { kind: 'hardware', title: 'Hardware', hint: 'Tools and building materials' },
+  { kind: 'beauty', title: 'Cosmetics and beauty', hint: 'Beauty and personal care' },
+  { kind: 'food', title: 'Food and drinks I make', hint: 'Food or drinks you prepare and sell. No stock count to keep' },
   { kind: 'none', title: 'I’ll add my own', hint: 'Start with an empty list' }
 ]
 
@@ -50,16 +50,16 @@ export function CreateShop({ phone: login, onDone, onSignOut }: { phone: string;
 
       <label className="field">
         <span>Your name</span>
-        <input type="text" value={me} onChange={(e) => setMe(e.target.value)} placeholder="e.g. Njeri" autoComplete="name" />
+        <input type="text" value={me} onChange={(e) => setMe(e.target.value)} autoComplete="name" />
       </label>
 
       <label className="field">
-        <span>Your shop’s name</span>
+        <span>Name of your shop or business</span>
         <input
           type="text"
           value={shop}
           onChange={(e) => setShop(e.target.value)}
-          placeholder="e.g. Mama Njeri Shop"
+          
           autoComplete="off"
         />
       </label>

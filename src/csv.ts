@@ -158,7 +158,7 @@ export function readProducts(table: string[][]): ImportPreview {
 
 export const TEMPLATE = toCsv([
   ['Name', 'Type', 'Selling price', 'Buying price', 'In stock', 'Warn at'],
-  ['Sugar 1kg', 'Goods', 180, 160, 24, 5],
+  ['Item one', 'Goods', 180, 160, 24, 5],
   ['Cooking oil 1L', 'Goods', 320, 290, 12, 4],
-  ['Porridge cup', 'Service', 30, '', '', '']
+  ['Item two', 'Service', 30, '', '', '']
 ])

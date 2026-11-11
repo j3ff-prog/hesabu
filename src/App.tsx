@@ -11,6 +11,8 @@ import { ChangePinSheet } from './SignIn'
 import { Ribbon, MenuSheet, type Panel } from './Ribbon'
 import { HelpSheet, NotifyAsk, NotifySheet } from './Support'
 import { InstallAsk } from './Install'
+import { TextSizeSheet } from './TextSize'
+import './textsize'
 import { TeamSheet } from './Team'
 import { DataSheet } from './DataSheet'
 import { SettingsSheet } from './Settings'
@@ -153,6 +155,7 @@ function Shell() {
           </div>
 
           <NotifyAsk />
+          {panel === 'size' && <TextSizeSheet onClose={close} />}
           {panel === 'help' && <HelpSheet onClose={close} />}
           {panel === 'notify' && <NotifySheet onClose={close} />}
           {panel === 'menu' && <MenuSheet shop={shop} open={setPanel} onClose={close} />}

@@ -168,13 +168,13 @@ function ProductSheet({ product, onClose }: { product: Product | null; onClose: 
         </div>
         <p className="hint spaced">
           {service
-            ? 'Cooked food, drinks you make, haircuts and the like. No count to keep. Record what you spend on ingredients under Expenses.'
-            : 'Things you buy and resell. Tallyfy counts them and warns you when they run low.'}
+            ? 'Something you make or do. There is no count to keep. What you spend to make it goes under Expenses.'
+            : 'Something you buy and resell. Tallyfy counts it and warns you when it runs low.'}
         </p>
       </fieldset>
       <label className="field">
-        <span>Name</span>
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={service ? 'e.g. Porridge cup' : 'e.g. Sugar 1kg'} autoComplete="off" />
+        <span>Name of the item</span>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
       </label>
       <label className="field">
         <span>Selling price (KES)</span>
@@ -205,17 +205,23 @@ function ProductSheet({ product, onClose }: { product: Product | null; onClose: 
         Save product
       </button>
 
-      {product && (
-        <button
-          className={'btn text-danger block' + (confirmRemove ? ' armed' : '')}
-          onClick={async () => {
-            if (!confirmRemove) return setConfirmRemove(true)
-            await removeProduct(product.id)
-            onClose()
-          }}
-        >
-          {confirmRemove ? 'Tap again to remove for good' : 'Remove product'}
-        </button>
+      {product && !confirmRemove && (
+        <button className="btn text-danger block" onClick={() => setConfirmRemove(true)}>Remove this item</button>
+      )}
+      {product && confirmRemove && (
+        <div className="confirm-box" role="alertdialog" aria-label="Remove this item?">
+          <p className="confirm-q">Remove this item for good?</p>
+          <button
+            className="btn danger block"
+            onClick={async () => {
+              await removeProduct(product.id)
+              onClose()
+            }}
+          >
+            Yes, remove it
+          </button>
+          <button className="btn outline block gap-top" onClick={() => setConfirmRemove(false)}>No, keep it</button>
+        </div>
       )}
     </Sheet>
   )
