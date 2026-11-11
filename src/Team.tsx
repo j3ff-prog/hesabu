@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Role } from './db'
+import { useToast } from './Toast'
 import { useAuth } from './Auth'
 import { api } from './api'
 import { ApiError, type Member } from './cloudApi'
-import { MATRIX, RIGHTS_TABLE, ROLE_HINT, ROLE_LABEL } from './rights'
+import { DELEGABLE, GRANTS, MATRIX, RIGHTS_TABLE, ROLE_HINT, ROLE_LABEL, type Perm } from './rights'
 import { tempPin, validPin } from './pin'
 import { showPhone, toWaNumber } from './format'
 import { openWhatsApp, waLink } from './summary'
@@ -49,7 +50,7 @@ export function TeamSheet({ onClose }: { onClose: () => void }) {
                 <span className="avatar">{u.name.trim()[0]?.toUpperCase()}</span>
                 <span className="person-main">
                   <span className="person-name">{u.name}{u.userId === me.id ? ' (you)' : ''}</span>
-                  <span className="muted">{ROLE_LABEL[u.role]} · {showPhone(u.phone)}{u.active ? '' : ' · Switched off'}</span>
+                  <span className="muted">{ROLE_LABEL[u.role]}{u.perms ? ' · Own rights' : ''} · {showPhone(u.phone)}{u.active ? '' : ' · Switched off'}</span>
                 </span>
               </button>
             </li>
@@ -170,13 +171,26 @@ function StaffForm({ shopId, shopName, onClose }: { shopId: string; shopName: st
   )
 }
 
+const sameSet = (a: Iterable<Perm>, b: Iterable<Perm>): boolean => {
+  const x = new Set(a)
+  const y = new Set(b)
+  return x.size === y.size && [...x].every((p) => y.has(p))
+}
+const usual = (role: Role): Perm[] => MATRIX[role].filter((p) => DELEGABLE.includes(p))
+
 function EditMember({ shopId, shopName, member, isMe, onClose }: { shopId: string; shopName: string; member: Member; isMe: boolean; onClose: () => void }) {
+  const toast = useToast()
   const [role, setRole] = useState<Role>(member.role)
   const [active, setActive] = useState(member.active)
+  const startPerms = member.perms ? member.perms.filter((p) => DELEGABLE.includes(p)) : usual(member.role)
+  const [perms, setPerms] = useState<Set<Perm>>(new Set(startPerms))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [newPin, setNewPin] = useState<string | null>(null)
+  const [removing, setRemoving] = useState(false)
   const isOwner = member.role === 'owner'
+  const isUsual = sameSet(perms, usual(role))
+  const changed = role !== member.role || active !== member.active || !sameSet(perms, startPerms)
 
   if (newPin)
     return (
@@ -196,6 +210,16 @@ function EditMember({ shopId, shopName, member, isMe, onClose }: { shopId: strin
     }
   }
 
+  const pickRole = (r: Role) => {
+    setRole(r)
+    setPerms(new Set(usual(r)))
+  }
+  const toggle = (g: { perms: Perm[] }, on: boolean) => {
+    const next = new Set(perms)
+    for (const p of g.perms) (on ? next.add(p) : next.delete(p))
+    setPerms(next)
+  }
+
   return (
     <Sheet title={member.name} onClose={onClose}>
       <p className="muted">{ROLE_LABEL[member.role]} · {showPhone(member.phone)}</p>
@@ -205,20 +229,49 @@ function EditMember({ shopId, shopName, member, isMe, onClose }: { shopId: strin
             <legend>Role</legend>
             <div className="segment" role="radiogroup">
               {(['attendant', 'manager'] as const).map((r) => (
-                <button key={r} role="radio" aria-checked={role === r} className={role === r ? 'on' : ''} onClick={() => setRole(r)}>{ROLE_LABEL[r]}</button>
+                <button key={r} role="radio" aria-checked={role === r} className={role === r ? 'on' : ''} onClick={() => pickRole(r)}>{ROLE_LABEL[r]}</button>
               ))}
             </div>
             <p className="hint spaced">{ROLE_HINT[role]}</p>
           </fieldset>
+
+          <h3 className="muted-head first">What {member.name} can do</h3>
+          <p className="hint spaced">Switch on only what they need. Changing the role puts these back to the usual ones for that role.</p>
+          <ul className="grants">
+            {GRANTS.map((g) => {
+              const on = g.perms.every((p) => perms.has(p))
+              return (
+                <li key={g.label}>
+                  <label className="grant">
+                    <input type="checkbox" checked={on} onChange={(e) => toggle(g, e.target.checked)} />
+                    <span className="grant-text">
+                      <span className="grant-name">{g.label}</span>
+                      <span className="muted">{g.hint}</span>
+                    </span>
+                  </label>
+                </li>
+              )
+            })}
+          </ul>
+          {!isUsual && (
+            <button className="link" onClick={() => setPerms(new Set(usual(role)))}>Go back to the usual rights for a {ROLE_LABEL[role].toLowerCase()}</button>
+          )}
+
           <label className="check">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
             <span>Can use the app</span>
           </label>
-          {!active && <p className="hint">Switched off people cannot sign in. Their old sales stay.</p>}
+          {!active && <p className="hint">Switched off people cannot sign in. Switch them back on any time.</p>}
           <button
             className="btn primary block"
-            disabled={busy || (role === member.role && active === member.active)}
-            onClick={() => run(async () => { await api.setMember(shopId, member.userId, role as 'manager' | 'attendant', active); onClose() })}
+            disabled={busy || !changed}
+            onClick={() =>
+              run(async () => {
+                await api.setMember(shopId, member.userId, role as 'manager' | 'attendant', active, isUsual ? null : [...perms])
+                toast.show({ text: 'Saved', sub: `${member.name}’s access was updated` })
+                onClose()
+              })
+            }
           >
             Save changes
           </button>
@@ -229,6 +282,29 @@ function EditMember({ shopId, shopName, member, isMe, onClose }: { shopId: strin
           >
             Set a new PIN for them
           </button>
+
+          {!removing ? (
+            <button className="btn text-danger block" disabled={busy} onClick={() => setRemoving(true)}>Remove from team</button>
+          ) : (
+            <div className="confirm-box" role="alertdialog" aria-label={`Remove ${member.name}?`}>
+              <p className="confirm-q">Remove {member.name} from your team?</p>
+              <p className="hint spaced">They lose access straight away. Their past sales stay in your records under their name.</p>
+              <button
+                className="btn danger block"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await api.removeMember(shopId, member.userId)
+                    toast.show({ text: 'Removed', sub: `${member.name} is no longer on your team` })
+                    onClose()
+                  })
+                }
+              >
+                Yes, remove them
+              </button>
+              <button className="btn outline block gap-top" onClick={() => setRemoving(false)}>No, keep them</button>
+            </div>
+          )}
         </>
       )}
       {isOwner && isMe && <p className="hint">You are the owner. Change your own PIN from the menu.</p>}

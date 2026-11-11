@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { ApiError, type Api, type Row, type SyncTable } from './cloudApi'
-import { db, type Closing, type Customer, type Expense, type ExpensePayment, type Payment, type Product, type Role, type Sale } from './db'
+import { db, type Closing, type Customer, type Expense, type ExpensePayment, type Payment, type Product, type Sale } from './db'
+import type { Perm } from './rights'
 
 /** Keeps this phone and the server in step. Works offline: everything is saved here first and sent when there is signal. */
 
@@ -84,8 +85,11 @@ async function clean<T extends { dirty?: 0 | 1; rev?: number }>(
   else if (cur && Object.keys(extra).length) await table.update(key as never, extra)
 }
 
-async function push(api: Api, shopId: string, role: Role): Promise<void> {
-  const money = role === 'owner' || role === 'manager'
+/** Asks whether this person has a right, so only data they may see is fetched and only what they may change is sent. */
+type Has = (p: Perm) => boolean
+
+async function push(api: Api, shopId: string, has: Has): Promise<void> {
+  const money = has('seeCost') && has('editStock')
   const stockDelta = await pendingStock()
 
   const products = await db.products.where('dirty').equals(1).toArray()
@@ -182,8 +186,7 @@ async function push(api: Api, shopId: string, role: Role): Promise<void> {
 
 // ---------- Download ----------
 
-async function pullAll(api: Api, shopId: string, role: Role): Promise<void> {
-  const money = role === 'owner' || role === 'manager'
+async function pullAll(api: Api, shopId: string, has: Has): Promise<void> {
   const stockDelta = await pendingStock()
 
   const each = async (table: SyncTable, apply: (rows: Row[]) => Promise<void>) => {
@@ -217,7 +220,7 @@ async function pullAll(api: Api, shopId: string, role: Role): Promise<void> {
     })
   })
 
-  if (money) {
+  if (has('seeCost')) {
     await each('product_costs', async (rows) => {
       await db.transaction('rw', db.products, async () => {
         for (const r of rows) {
@@ -256,7 +259,7 @@ async function pullAll(api: Api, shopId: string, role: Role): Promise<void> {
     })
   })
 
-  if (money) {
+  if (has('expenses')) {
     await each('expenses', async (rows) => {
       await db.transaction('rw', db.expenses, async () => {
         for (const r of rows) {
@@ -279,7 +282,7 @@ async function pullAll(api: Api, shopId: string, role: Role): Promise<void> {
     })
   }
 
-  if (money) {
+  if (has('expenses')) {
     await each('expense_payments', async (rows) => {
       await db.transaction('rw', db.expensePayments, async () => {
         for (const r of rows) {
@@ -335,7 +338,7 @@ async function pullAll(api: Api, shopId: string, role: Role): Promise<void> {
     })
   })
 
-  if (money) {
+  if (has('today')) {
     await each('closings', async (rows) => {
       await db.transaction('rw', db.closings, async () => {
         for (const r of rows) {
@@ -358,7 +361,7 @@ export interface SyncHandle {
   now: () => Promise<void>
 }
 
-export function startSync(api: Api, shopId: string, role: Role, onDenied?: () => void): SyncHandle {
+export function startSync(api: Api, shopId: string, has: Has, onDenied?: () => void): SyncHandle {
   let running = false
   let again = false
   let stopped = false
@@ -378,7 +381,7 @@ export function startSync(api: Api, shopId: string, role: Role, onDenied?: () =>
         timeout = window.setTimeout(() => no(new ApiError('network', 'Sync took too long')), 45_000)
       })
       try {
-        await Promise.race([(async () => { await push(api, shopId, role); await pullAll(api, shopId, role) })(), limit])
+        await Promise.race([(async () => { await push(api, shopId, has); await pullAll(api, shopId, has) })(), limit])
       } finally {
         window.clearTimeout(timeout)
       }

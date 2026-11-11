@@ -193,59 +193,134 @@ export interface ProfitDatum {
 }
 
 /** Profit over time, as bars or as a line. A loss goes below the zero line and turns red. */
-export function ProfitChart({ data, mode, height = 200, label }: { data: ProfitDatum[]; mode: 'bars' | 'line'; height?: number; label: string }) {
+/** A smooth curve through the points that never swings above or below them (monotone cubic). */
+function smoothPath(pts: { x: number; y: number }[]): string {
+  const n = pts.length
+  if (n === 0) return ''
+  if (n === 1) return `M${pts[0].x},${pts[0].y}`
+  const dx: number[] = []
+  const m: number[] = []
+  for (let i = 0; i < n - 1; i++) {
+    dx.push(pts[i + 1].x - pts[i].x)
+    m.push((pts[i + 1].y - pts[i].y) / (pts[i + 1].x - pts[i].x || 1))
+  }
+  const t: number[] = [m[0]]
+  for (let i = 1; i < n - 1; i++) t.push(m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2)
+  t.push(m[n - 2])
+  for (let i = 0; i < n - 1; i++) {
+    if (m[i] === 0) {
+      t[i] = 0
+      t[i + 1] = 0
+      continue
+    }
+    const a = t[i] / m[i]
+    const b = t[i + 1] / m[i]
+    const h = Math.hypot(a, b)
+    if (h > 3) {
+      t[i] = (3 * a * m[i]) / h
+      t[i + 1] = (3 * b * m[i]) / h
+    }
+  }
+  let d = `M${pts[0].x},${pts[0].y}`
+  for (let i = 0; i < n - 1; i++) {
+    const c1x = pts[i].x + dx[i] / 3
+    const c2x = pts[i + 1].x - dx[i] / 3
+    d += ` C${c1x},${pts[i].y + (t[i] * dx[i]) / 3} ${c2x},${pts[i + 1].y - (t[i + 1] * dx[i]) / 3} ${pts[i + 1].x},${pts[i + 1].y}`
+  }
+  return d
+}
+
+/** 1, 2 or 5 times a power of ten: the step between the lines on a chart. */
+function niceStep(v: number): number {
+  const pow = Math.pow(10, Math.floor(Math.log10(Math.max(v, 1e-9))))
+  const f = v / pow
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * pow
+}
+
+let chartId = 0
+
+export function ProfitChart({ data, mode, height = 220, label }: { data: ProfitDatum[]; mode: 'bars' | 'line'; height?: number; label: string }) {
   const [ref, w] = useWidth<HTMLDivElement>()
   const [sel, setSel] = useState<number | null>(null)
-  const padL = 40
-  const padB = 22
-  const padT = 8
+  const [uid] = useState(() => `pc${++chartId}`)
+  const padL = 44
+  const padB = 24
+  const padT = 10
+  const padR = 8
   const innerH = height - padB - padT
   const vals = data.map((d) => d.value)
   const maxV = Math.max(0, ...vals)
   const minV = Math.min(0, ...vals)
-  const top = maxV > 0 ? niceMax(maxV) : minV < 0 ? 0 : 1
-  const bottom = minV < 0 ? -niceMax(-minV) : 0
-  const range = top - bottom
+  const step4 = niceStep((maxV - minV || 1) / 4)
+  const top = Math.ceil(maxV / step4) * step4 || step4
+  const bottom = Math.floor(minV / step4) * step4
+  const range = top - bottom || 1
   const y = (v: number) => padT + ((top - v) / range) * innerH
-  const innerW = Math.max(0, w - padL - 4)
+  const innerW = Math.max(0, w - padL - padR)
   const step = data.length ? innerW / data.length : 0
   const barW = Math.max(2, Math.min(34, step * 0.7))
-  const every = Math.max(1, Math.ceil(data.length / Math.max(1, Math.floor(innerW / 46))))
-  const ticks = [...new Set([top, 0, bottom])]
+  const every = Math.max(1, Math.ceil(data.length / Math.max(1, Math.floor(innerW / 52))))
+  const ticks: number[] = []
+  for (let t = bottom; t <= top + step4 / 2; t += step4) ticks.push(Math.round(t * 1e6) / 1e6)
+  // Lines run from the middle of the first day to the middle of the last, like a normal line graph.
   const cx = (i: number) => padL + step * i + step / 2
   const shown = sel !== null ? data[sel] : null
   const colorOf = (v: number) => (v < 0 ? COLORS.alert : COLORS.profit)
+  const pts = data.map((d, i) => ({ x: cx(i), y: y(d.value) }))
+  const curve = smoothPath(pts)
+  const base = y(0)
+  const area = pts.length > 1 ? `${curve} L${pts[pts.length - 1].x},${base} L${pts[0].x},${base} Z` : ''
 
   return (
     <div className="chart" ref={ref}>
       {w > 0 && (
         <svg width={w} height={height} role="img" aria-label={label}>
+          <defs>
+            <linearGradient id={`${uid}-up`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={COLORS.profit} stopOpacity="0.28" />
+              <stop offset="100%" stopColor={COLORS.profit} stopOpacity="0.02" />
+            </linearGradient>
+            <linearGradient id={`${uid}-down`} x1="0" y1="1" x2="0" y2="0">
+              <stop offset="0%" stopColor={COLORS.alert} stopOpacity="0.28" />
+              <stop offset="100%" stopColor={COLORS.alert} stopOpacity="0.02" />
+            </linearGradient>
+            <clipPath id={`${uid}-above`}><rect x="0" y="0" width={w} height={base} /></clipPath>
+            <clipPath id={`${uid}-below`}><rect x="0" y={base} width={w} height={Math.max(0, height - base)} /></clipPath>
+          </defs>
           {ticks.map((t) => (
             <g key={t}>
-              <line x1={padL} x2={w} y1={y(t)} y2={y(t)} stroke={t === 0 ? 'var(--ink-soft, #6b6b6b)' : 'var(--line)'} strokeWidth={t === 0 ? 1.5 : 1} />
-              <text x={padL - 6} y={y(t) + 4} textAnchor="end" className="ax">{compact(t)}</text>
+              <line x1={padL} x2={w - padR} y1={y(t)} y2={y(t)} stroke={t === 0 && bottom < 0 ? 'var(--ink-soft, #6b6b6b)' : 'var(--line)'} strokeWidth={t === 0 && bottom < 0 ? 1.4 : 1} opacity={t === 0 && bottom < 0 ? 0.9 : 0.8} />
+              <text x={padL - 8} y={y(t) + 4} textAnchor="end" className="ax">{compact(t)}</text>
             </g>
           ))}
-          {mode === 'line' && data.length > 1 && (
-            <polyline fill="none" stroke={COLORS.profit} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" points={data.map((d, i) => `${cx(i)},${y(d.value)}`).join(' ')} />
+          {mode === 'line' && pts.length > 1 && (
+            <g>
+              <path d={area} fill={`url(#${uid}-up)`} clipPath={`url(#${uid}-above)`} />
+              <path d={area} fill={`url(#${uid}-down)`} clipPath={`url(#${uid}-below)`} />
+              <path d={curve} fill="none" stroke={COLORS.profit} strokeWidth="2.6" strokeLinejoin="round" strokeLinecap="round" clipPath={`url(#${uid}-above)`} />
+              <path d={curve} fill="none" stroke={COLORS.alert} strokeWidth="2.6" strokeLinejoin="round" strokeLinecap="round" clipPath={`url(#${uid}-below)`} />
+            </g>
+          )}
+          {mode === 'line' && pts.length === 1 && <circle cx={pts[0].x} cy={pts[0].y} r="4" fill={colorOf(data[0].value)} />}
+          {mode === 'line' && sel !== null && pts[sel] && (
+            <g>
+              <line x1={pts[sel].x} x2={pts[sel].x} y1={padT} y2={padT + innerH} stroke="var(--ink-soft, #6b6b6b)" strokeDasharray="3 3" opacity="0.6" />
+              <circle cx={pts[sel].x} cy={pts[sel].y} r="5.5" fill={colorOf(data[sel].value)} stroke="var(--paper, #fff)" strokeWidth="2" />
+            </g>
           )}
           {data.map((d, i) => (
             <g key={i} onPointerEnter={() => setSel(i)} onClick={() => setSel(i === sel ? null : i)} style={{ cursor: 'pointer' }}>
               <rect x={padL + step * i} y={padT} width={step} height={innerH} fill="transparent" />
-              {mode === 'bars' ? (
-                d.value !== 0 && (
-                  <rect
-                    x={cx(i) - barW / 2}
-                    y={Math.min(y(0), y(d.value))}
-                    width={barW}
-                    height={Math.max(1, Math.abs(y(d.value) - y(0)))}
-                    fill={colorOf(d.value)}
-                    opacity={sel === null || sel === i ? 1 : 0.45}
-                    rx={Math.min(3, barW / 3)}
-                  />
-                )
-              ) : (
-                <circle cx={cx(i)} cy={y(d.value)} r={sel === i ? 5 : 3.5} fill={colorOf(d.value)} stroke="var(--paper, #fff)" strokeWidth="1.5" />
+              {mode === 'bars' && d.value !== 0 && (
+                <rect
+                  x={cx(i) - barW / 2}
+                  y={Math.min(y(0), y(d.value))}
+                  width={barW}
+                  height={Math.max(1, Math.abs(y(d.value) - y(0)))}
+                  fill={colorOf(d.value)}
+                  opacity={sel === null || sel === i ? 1 : 0.45}
+                  rx={Math.min(3, barW / 3)}
+                />
               )}
               {i % every === 0 && <text x={cx(i)} y={height - 6} textAnchor="middle" className="ax">{d.label}</text>}
             </g>
@@ -259,7 +334,7 @@ export function ProfitChart({ data, mode, height = 200, label }: { data: ProfitD
             <span><i style={{ background: colorOf(shown.value) }} />{shown.value < 0 ? 'Loss' : 'Profit'} {money(Math.abs(shown.value))}</span>
           </>
         ) : (
-          <span className="muted">Tap a {mode === 'bars' ? 'bar' : 'point'} to see the numbers. Red below the line means a loss.</span>
+          <span className="muted">Tap the chart to see the numbers for a day. Red below the line means a loss.</span>
         )}
       </p>
     </div>

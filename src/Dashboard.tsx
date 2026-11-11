@@ -13,9 +13,9 @@ const PERIODS = [1, 7, 30, 90]
 const VIEW_KEY = 'tallify.profitView'
 const readView = (): 'bars' | 'line' => {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'line' ? 'line' : 'bars'
+    return localStorage.getItem(VIEW_KEY) === 'bars' ? 'bars' : 'line'
   } catch {
-    return 'bars'
+    return 'line'
   }
 }
 
@@ -94,7 +94,25 @@ export function Dashboard() {
       </div>
       <p className="muted sub-range">{days === 1 ? 'Today, ' + shortDate(d.from) : `${shortDate(d.from)} to ${shortDate(d.to - 1)}`}</p>
 
-      {can('expenses') ? (
+      {can('expenses') && can('seeCost') ? (
+        <section className="hero" aria-label="Profit">
+          <p className="hero-label">{d.profit < 0 ? 'Loss' : 'Profit'}</p>
+          <p className={'hero-num' + (d.profit < 0 ? ' neg' : '')}><span>KES</span> {money(Math.abs(d.profit))}</p>
+          <div className="hero-pl">
+            <span>Money on hand</span>
+            <strong className={d.onHand.total < 0 ? 'neg-text' : ''}>KES {money(d.onHand.total)}</strong>
+          </div>
+          <dl className="hero-split two">
+            <div><dt>In cash</dt><dd>{money(d.onHand.cash)}</dd></div>
+            <div><dt>On M-Pesa</dt><dd>{money(d.onHand.mpesa)}</dd></div>
+          </dl>
+          <p className="hero-note">
+            Profit is what you earned from sales that were paid for, minus your costs. Costs like rent are spread over the days they cover.
+            {d.stockPaid > 0 ? ` You paid KES ${money(d.stockPaid)} for new stock. That lowers your money on hand, but it only counts against profit once you sell it.` : ''}
+            {d.sales > 0 && d.countedShare < 0.999 ? ` Profit is based on ${Math.round(d.countedShare * 100)}% of sales: goods without a buying price are left out.` : ''}
+          </p>
+        </section>
+      ) : can('expenses') ? (
         <section className="hero" aria-label="Money on hand">
           <p className="hero-label">Money on hand</p>
           <p className={'hero-num' + (d.onHand.total < 0 ? ' neg' : '')}><span>KES</span> {money(d.onHand.total)}</p>
@@ -102,16 +120,7 @@ export function Dashboard() {
             <div><dt>In cash</dt><dd>{money(d.onHand.cash)}</dd></div>
             <div><dt>On M-Pesa</dt><dd>{money(d.onHand.mpesa)}</dd></div>
           </dl>
-          {can('seeCost') && (
-            <div className={'hero-pl' + (d.profit < 0 ? ' loss' : '')}>
-              <span>{d.profit < 0 ? 'Loss' : 'Profit'}</span>
-              <strong>KES {money(Math.abs(d.profit))}</strong>
-            </div>
-          )}
-          <p className="hero-note">
-            Money received minus money paid out. A credit sale counts once the customer pays. Costs like rent are spread over the days they cover.
-            {can('seeCost') && d.sales > 0 && d.countedShare < 0.999 ? ` Profit is based on ${Math.round(d.countedShare * 100)}% of sales: goods without a buying price are left out.` : ''}
-          </p>
+          <p className="hero-note">Money received minus money paid out. A credit sale counts once the customer pays.</p>
         </section>
       ) : (
         <section className="hero" aria-label="Sales">
@@ -196,9 +205,9 @@ export function Dashboard() {
             { name: 'Out of stock', value: d.stock.out, color: COLORS.alert }
           ]} />
           {can('seeCost') && (
-            <dl className="mini-split">
-              <div><dt>Stock worth (buying price)</dt><dd>KES {compact(d.stock.atCost)}</dd></div>
-              <div><dt>Stock worth (selling price)</dt><dd>KES {compact(d.stock.atPrice)}</dd></div>
+            <dl className="pay-split two-col">
+              <div style={{ ['--c' as string]: '#6b7f99' }}><dt>Stock worth at buying price</dt><dd>KES {compact(d.stock.atCost)}</dd></div>
+              <div style={{ ['--c' as string]: '#0e5a52' }}><dt>Stock worth at selling price</dt><dd>KES {compact(d.stock.atPrice)}</dd></div>
             </dl>
           )}
         </Card>

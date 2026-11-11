@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { ApiError, PHONE_EMAIL, PIN_PASSWORD, type SupportMsg, type AdminShop, type Api, type Member, type Row, type Session, type ShopInfo, type ShopState } from './cloudApi'
+import type { Perm } from './rights'
 import type { Role } from './db'
 
 export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || 'https://rkvjhveblhiprvyttxus.supabase.co'
@@ -72,15 +73,16 @@ export const realApi: Api = {
 
   async myShops() {
     const uid = (await sb().auth.getUser()).data.user?.id
-    const rows = ok(await sb().from('members').select('role, name, shop:shops(id, name, owner_phone)').eq('user_id', uid ?? '').eq('active', true)) as unknown as {
+    const rows = ok(await sb().from('members').select('role, perms, name, shop:shops(id, name, owner_phone)').eq('user_id', uid ?? '').eq('active', true)) as unknown as {
       role: Role
+      perms: Perm[] | null
       name: string
       shop: { id: string; name: string; owner_phone: string } | { id: string; name: string; owner_phone: string }[] | null
     }[]
     const out: ShopInfo[] = []
     for (const m of rows) {
       const s = Array.isArray(m.shop) ? m.shop[0] : m.shop
-      if (s) out.push({ id: s.id, name: s.name, role: m.role, memberName: m.name, ownerPhone: s.owner_phone })
+      if (s) out.push({ id: s.id, name: s.name, role: m.role, perms: m.perms, memberName: m.name, ownerPhone: s.owner_phone })
     }
     return out
   },
@@ -96,10 +98,10 @@ export const realApi: Api = {
     return r ? { writable: r.writable, status: r.status, until: r.until, message: r.message } : null
   },
   async members(shopId) {
-    const rows = ok(await sb().from('members').select('user_id, name, phone, role, active').eq('shop_id', shopId).order('created_at')) as {
-      user_id: string; name: string; phone: string; role: Role; active: boolean
+    const rows = ok(await sb().from('members').select('user_id, name, phone, role, active, perms').eq('shop_id', shopId).order('created_at')) as {
+      user_id: string; name: string; phone: string; role: Role; active: boolean; perms: Perm[] | null
     }[]
-    return rows.map((m): Member => ({ userId: m.user_id, name: m.name, phone: m.phone, role: m.role, active: m.active }))
+    return rows.map((m): Member => ({ userId: m.user_id, name: m.name, phone: m.phone, role: m.role, active: m.active, perms: m.perms }))
   },
   async addStaff(shopId, name, phone, role, pin) {
     const r = await sb().functions.invoke('add-staff', { body: { action: 'add', shopId, name, phone, role, pin } })
@@ -118,8 +120,11 @@ export const realApi: Api = {
       throw new ApiError('unknown', msg)
     }
   },
-  async setMember(shopId, userId, role, active) {
-    ok(await sb().rpc('set_member', { p_shop: shopId, p_user: userId, p_role: role, p_active: active }))
+  async setMember(shopId, userId, role, active, perms) {
+    ok(await sb().rpc('set_member', { p_shop: shopId, p_user: userId, p_role: role, p_active: active, p_perms: perms }))
+  },
+  async removeMember(shopId, userId) {
+    ok(await sb().rpc('remove_member', { p_shop: shopId, p_user: userId }))
   },
 
   async pull(shopId, table, since) {

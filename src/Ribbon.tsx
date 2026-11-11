@@ -27,11 +27,10 @@ const useOnline = (): boolean => {
 
 function PayButton() {
   return (
-    <>
-      {' '}
+    <div className="pay-row">
       <a className="btn amber pay-btn" href={PAY_URL} target="_blank" rel="noopener noreferrer">Pay KES {PRICE}</a>
       <span className="hint block-hint">On the payment page, type the phone number you sign in to Tallyfy with.</span>
-    </>
+    </div>
   )
 }
 

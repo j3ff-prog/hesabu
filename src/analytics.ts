@@ -29,6 +29,7 @@ export interface Dashboard {
   payables: number // bills still to pay
   bills: number
   paidOut: number // money paid out for expenses in this period
+  stockPaid: number // paid for new stock in this period
   creditGiven: number
   split: { cash: number; mpesa: number; credit: number }
   onHand: { cash: number; mpesa: number; total: number } // received minus spent, by cash and M-Pesa. Credit not yet paid is left out.
@@ -146,6 +147,7 @@ export function buildDashboard(
     payables: owedBills.reduce((t, b) => t + b.balance, 0),
     bills: owedBills.length,
     paidOut: cashOut + mpesaOut,
+    stockPaid: exp.filter((e) => e.category === STOCK_CATEGORY && e.method !== 'credit').reduce((t, e) => t + e.amount, 0),
     creditGiven: split.credit,
     split,
     onHand: { cash: onHandCash, mpesa: onHandMpesa, total: onHandCash + onHandMpesa },

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { openShopDb, setActor, type Role } from './db'
-import { roleCan, WRITES, type Perm } from './rights'
+import { memberCan, WRITES, type Perm } from './rights'
 import { api } from './api'
 import { ApiError, type Session, type ShopInfo, type ShopState } from './cloudApi'
 import { startSync, countPending, type SyncHandle } from './sync'
@@ -115,6 +115,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             writeCache(null)
             writeActive('')
             window.location.reload()
+            return
+          }
+          // Pick up any change the owner made to this person's rights while the app was closed.
+          const fresh = await api.myShops()
+          setShops(fresh)
+          writeCache({ session: cached.session, shops: fresh, states: readCache()?.states ?? cached.states })
+          const act = readActive()
+          if (act && !fresh.some((x) => x.id === act)) {
+            writeActive('')
+            window.location.reload()
           }
         } catch {
           /* offline: keep going */
@@ -151,6 +161,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const shop = shops.find((s) => s.id === shopId)
   const role: Role = shop?.role ?? 'attendant'
+  const permsKey = shop?.perms ? [...shop.perms].sort().join(',') : '-'
+  const perms = shop?.perms ?? null
 
   // Records say who made them, and the shop's number is kept for the WhatsApp summary.
   useEffect(() => {
@@ -191,7 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Sync while a shop is open. A refusal usually means the subscription ended or the role changed: look again.
   useEffect(() => {
     if (phase !== 'ready' || !shopId) return
-    const h = startSync(api, shopId, role, () => void refresh())
+    const h = startSync(api, shopId, (p) => memberCan(role, perms, p), () => void refresh())
     sync.current = h
     void loadState(shopId)
     const t = window.setInterval(() => void refresh(), 5 * 60_000)
@@ -205,7 +217,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       h.stop()
       sync.current = null
     }
-  }, [phase, shopId, role, loadState, refresh])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, shopId, role, permsKey, loadState, refresh])
 
   const signOut = useCallback(async (): Promise<void> => {
     sync.current?.stop()
@@ -225,7 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const readOnly = !!shopState && !shopState.writable
-  const can = useCallback((p: Perm) => roleCan(role, p) && !(readOnly && WRITES.has(p)), [role, readOnly])
+  const can = useCallback((p: Perm) => memberCan(role, perms, p) && !(readOnly && WRITES.has(p)), [role, permsKey, readOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const value = useMemo<AuthValue>(
     () => ({

@@ -1,4 +1,5 @@
 import type { Role } from './db'
+import type { Perm } from './rights'
 
 /** Everything the app needs from the server, in one place. The real one talks to Supabase. */
 
@@ -17,6 +18,7 @@ export interface ShopInfo {
   id: string
   name: string
   role: Role
+  perms?: Perm[] | null // the owner's own list of rights for this person, if they set one
   memberName: string
   ownerPhone: string
 }
@@ -34,6 +36,7 @@ export interface Member {
   phone: string
   role: Role
   active: boolean
+  perms?: Perm[] | null // null: the usual rights for the role
 }
 
 export interface AdminShop {
@@ -86,7 +89,8 @@ export interface Api {
   members(shopId: string): Promise<Member[]>
   addStaff(shopId: string, name: string, phone: string, role: 'manager' | 'attendant', pin: string): Promise<{ existing: boolean }>
   resetPin(shopId: string, phone: string, pin: string): Promise<void>
-  setMember(shopId: string, userId: string, role: 'manager' | 'attendant', active: boolean): Promise<void>
+  setMember(shopId: string, userId: string, role: 'manager' | 'attendant', active: boolean, perms: Perm[] | null): Promise<void>
+  removeMember(shopId: string, userId: string): Promise<void>
 
   /** Rows changed since `since` (an ISO time or null for everything), oldest first, at most 500. */
   pull(shopId: string, table: SyncTable, since: string | null): Promise<Row[]>

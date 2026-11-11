@@ -55,3 +55,24 @@ export const RIGHTS_TABLE: { label: string; perm: Perm }[] = [
 export const WRITES: ReadonlySet<Perm> = new Set<Perm>(['sell', 'voidSale', 'editStock', 'addExpense', 'importStock'])
 
 export const roleCan = (role: Role, perm: Perm): boolean => MATRIX[role].includes(perm)
+
+/** What one person can do: their own list if the owner set one, otherwise the usual rights for their role. */
+export const memberCan = (role: Role, perms: Perm[] | null | undefined, perm: Perm): boolean =>
+  role === 'owner' ? true : perms ? perms.includes(perm) : roleCan(role, perm)
+
+/** The rights an owner can hand out, in plain words. Settings and managing the team always stay with the owner. */
+export const GRANTS: { label: string; hint: string; perms: Perm[] }[] = [
+  { label: 'Record sales', hint: 'Make new sales', perms: ['sell'] },
+  { label: 'Cancel a sale', hint: 'Undo a sale that was recorded', perms: ['voidSale'] },
+  { label: 'See stock', hint: 'Look at the items and how many are left', perms: ['viewStock'] },
+  { label: 'Add or change items', hint: 'Add, edit and remove items', perms: ['editStock'] },
+  { label: 'Take credit payments', hint: 'See who owes you and record what they pay', perms: ['credit'] },
+  { label: 'See buying prices and profit', hint: 'What you paid for items, and what you earned', perms: ['seeCost'] },
+  { label: 'Expenses and bills', hint: 'See and add expenses, pay bills', perms: ['expenses', 'addExpense'] },
+  { label: 'Reports and closing the day', hint: 'The day’s report and the cash count', perms: ['today'] },
+  { label: 'Overview charts', hint: 'Sales and profit over time', perms: ['dashboard'] },
+  { label: 'Download and upload data', hint: 'Spreadsheets in and out', perms: ['export', 'importStock'] }
+]
+
+/** The rights that can be handed to a manager or attendant. */
+export const DELEGABLE: Perm[] = GRANTS.flatMap((g) => g.perms)

@@ -1,4 +1,4 @@
-import type { Expense, ExpensePayment, Payment, Product, Sale } from './db'
+import { STOCK_CATEGORY, type Expense, type ExpensePayment, type Payment, type Product, type Sale } from './db'
 import { addDays, dateLabel, money } from './format'
 import { lineProfit } from './profit'
 import { partsOf } from './pay'
@@ -19,6 +19,7 @@ export interface DayFigures {
   onHand: { cash: number; mpesa: number; total: number } // money you should really have: received minus paid out. Credit not yet paid is left out.
   profit: number // see ledger.ts
   costs: number // the share of costs that belongs to today
+  stockPaid: number // paid today for new stock: it lowers money on hand but is not a cost until the stock is sold
   hasCost: boolean // there is something to base a profit on
   unknown: number // selling value of goods with no buying price, left out of profit
   payables: number // bills still to pay, all time
@@ -62,6 +63,7 @@ export function dayFigures(day: number, sales: Sale[], payments: Payment[], expe
     onHand: { cash: cashIn - cashOut, mpesa: mpesaIn - mpesaOut, total: cashIn + mpesaIn - cashOut - mpesaOut },
     profit: gainsBetween(buildGains(sales, payments), day, end) - costs,
     costs,
+    stockPaid: expenses.filter((e) => e.category === STOCK_CATEGORY && e.method !== 'credit' && e.createdAt >= day && e.createdAt < end).reduce((t, e) => t + e.amount, 0),
     hasCost,
     unknown,
     payables: owed.reduce((t, b) => t + b.balance, 0),

@@ -65,25 +65,36 @@ export function Today({ shop }: { shop: string }) {
       <div className="today-side">
       {full && can('expenses') ? (
         <>
-          <section className="hero" aria-label="Money on hand today">
-            <p className="hero-label">Money on hand today</p>
-            <p className={'hero-num' + (f.onHand.total < 0 ? ' neg' : '')}><span>KES</span> {money(f.onHand.total)}</p>
-            <dl className="hero-split two">
-              <div><dt>In cash</dt><dd>{money(f.onHand.cash)}</dd></div>
-              <div><dt>On M-Pesa</dt><dd>{money(f.onHand.mpesa)}</dd></div>
-            </dl>
-            {can('seeCost') && (
-              <div className={'hero-pl' + (f.profit < 0 ? ' loss' : '')}>
-                <span>{f.profit < 0 ? 'Loss today' : 'Profit today'}</span>
-                <strong>KES {money(Math.abs(f.profit))}</strong>
+          {can('seeCost') ? (
+            <section className="hero" aria-label="Profit today">
+              <p className="hero-label">{f.profit < 0 ? 'Loss today' : 'Profit today'}</p>
+              <p className={'hero-num' + (f.profit < 0 ? ' neg' : '')}><span>KES</span> {money(Math.abs(f.profit))}</p>
+              <div className="hero-pl">
+                <span>Money on hand today</span>
+                <strong className={f.onHand.total < 0 ? 'neg-text' : ''}>KES {money(f.onHand.total)}</strong>
               </div>
-            )}
-            <p className="hero-note">
-              Money received today minus money you paid out. Customers who have not paid yet are not counted.
-              {can('seeCost') && f.costs > 0 ? ` Profit includes KES ${money(f.costs)} of costs for today, like your share of rent.` : ''}
-              {can('seeCost') && f.unknown > 0 ? ' Goods with no buying price are left out of profit.' : ''}
-            </p>
-          </section>
+              <dl className="hero-split two">
+                <div><dt>In cash</dt><dd>{money(f.onHand.cash)}</dd></div>
+                <div><dt>On M-Pesa</dt><dd>{money(f.onHand.mpesa)}</dd></div>
+              </dl>
+              <p className="hero-note">
+                Profit is what you earned from sales that were paid for, minus your costs.
+                {f.costs > 0 ? ` It includes KES ${money(f.costs)} of costs for today, like your share of rent.` : ''}
+                {f.stockPaid > 0 ? ` You paid KES ${money(f.stockPaid)} for new stock. That lowers your money on hand, but it only counts against profit once you sell it.` : ''}
+                {f.unknown > 0 ? ' Goods with no buying price are left out of profit.' : ''}
+              </p>
+            </section>
+          ) : (
+            <section className="hero" aria-label="Money on hand today">
+              <p className="hero-label">Money on hand today</p>
+              <p className={'hero-num' + (f.onHand.total < 0 ? ' neg' : '')}><span>KES</span> {money(f.onHand.total)}</p>
+              <dl className="hero-split two">
+                <div><dt>In cash</dt><dd>{money(f.onHand.cash)}</dd></div>
+                <div><dt>On M-Pesa</dt><dd>{money(f.onHand.mpesa)}</dd></div>
+              </dl>
+              <p className="hero-note">Money received today minus money you paid out. Customers who have not paid yet are not counted.</p>
+            </section>
+          )}
 
           <section className="card-soft" aria-label="Sales today">
             <div className="card-row">
@@ -94,12 +105,12 @@ export function Today({ shop }: { shop: string }) {
               <p className="card-count">{f.live.length} {f.live.length === 1 ? 'sale' : 'sales'}</p>
             </div>
             {f.live.length > 0 ? <Tally count={f.live.length} /> : <p className="muted">No sales yet today.</p>}
-            <dl className="mini-split">
-              <div><dt>Cash</dt><dd>{money(f.cash)}</dd></div>
-              <div><dt>M-Pesa</dt><dd>{money(f.mpesa)}</dd></div>
-              <div><dt>On credit</dt><dd>{money(f.credit)}</dd></div>
+            <dl className="pay-split">
+              <div style={{ ['--c' as string]: '#0e5a52' }}><dt>Paid in cash</dt><dd>KES {money(f.cash)}</dd></div>
+              <div style={{ ['--c' as string]: '#f2a33a' }}><dt>Paid by M-Pesa</dt><dd>KES {money(f.mpesa)}</dd></div>
+              <div style={{ ['--c' as string]: '#6b7f99' }}><dt>Not paid yet (credit)</dt><dd>KES {money(f.credit)}</dd></div>
             </dl>
-            {f.collected > 0 && <p className="hint">Credit customers paid back KES {money(f.collected)} today.</p>}
+            {f.collected > 0 && <p className="hint spaced">Credit customers paid back KES {money(f.collected)} today.</p>}
           </section>
 
           {(owedToYou > 0 || f.payables > 0) && (
